@@ -77,4 +77,3 @@ if __name__ == "__main__":
     
     annot = detect(original_image, model, device, min_score = 0.2, max_overlap = 0.5, top_k = 5)
     annot.save("./results/detection_with_background.jpg")
-    
