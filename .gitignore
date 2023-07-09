@@ -1,0 +1,11 @@
+# dataset
+dataset/*
+
+# weight
+weights/*.pt
+
+# .out file
+*.out
+
+# run file
+runs/*
