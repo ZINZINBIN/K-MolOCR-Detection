@@ -61,7 +61,6 @@ def train_per_epoch(
     
     return train_loss
 
-
 def valid_per_epoch(
     dataloader : DataLoader, 
     model : torch.nn.Module,

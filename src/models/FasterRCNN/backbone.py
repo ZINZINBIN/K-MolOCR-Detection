@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torchvision.models import vgg16
 from typing import Optional, List
 
 channels_cfgs = [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M']

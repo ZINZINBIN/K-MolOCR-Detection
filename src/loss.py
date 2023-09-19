@@ -98,3 +98,10 @@ class MultiBoxLoss(nn.Module):
         conf_loss = (conf_loss_hard_neg.sum() + conf_loss_pos.sum()) / n_positives.sum().float()  # (), scalar
 
         return conf_loss + self.alpha * loc_loss
+    
+class FasterRCNNLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+    
+    def forward(self, predicted_locs:torch.Tensor, predicted_scores:torch.Tensor, boxes:torch.Tensor, labels:torch.Tensor):
+        return None

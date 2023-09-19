@@ -3,7 +3,7 @@ import torch, os
 from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 from src.models.SSD300.model import SSD300
-from src.models.FasterRCNN.FasterRCNN import FasterRCNN
+from src.models.FasterRCNN.FasterRCNN import FasterRCNNVGG16
 from src.dataset import DetectionDataset
 from src.loss import MultiBoxLoss
 from src.train import train
@@ -15,7 +15,7 @@ def parsing():
     
     # tag and result directory
     parser.add_argument("--tag", type = str, default = "")
-    parser.add_argument("--model", type = str, default = "SSD", chocies = ["SSD", "FasterRCNN", "RCNN"])
+    parser.add_argument("--model", type = str, default = "SSD", choices = ["SSD", "FasterRCNN", "RCNN"])
     parser.add_argument("--save_dir", type = str, default = "./results")
 
     # gpu allocation
@@ -104,7 +104,7 @@ if __name__ == "__main__":
     if args['model'] == 'SSD':
         model = SSD300(4)
     elif args['model'] == 'FasterRCNN':
-        model = FasterRCNN()
+        model = FasterRCNNVGG16(n_fg_class=4)
         
     loss_fn = MultiBoxLoss(model.priors_cxcy)
     model.to(device)
