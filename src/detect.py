@@ -17,6 +17,8 @@ def detect(original_image, model:nn.Module, device:str, min_score, max_overlap, 
     image = transform(original_image)
     model.eval()
     
+    is_success = False
+    
     if type(model) == FasterRCNN:
         det_boxes, det_labels, det_scores = model.predict(image.unsqueeze(0).to(device))
     
@@ -60,4 +62,7 @@ def detect(original_image, model:nn.Module, device:str, min_score, max_overlap, 
         draw.text(xy=text_location, text=det_labels[i].upper(), fill='white',
                   font=font)
     del draw
-    return annotated_image
+    
+    is_success = True
+    
+    return annotated_image, is_success
