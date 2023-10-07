@@ -183,22 +183,6 @@ def Smiles2Img(smiles, IMG_SIZE : int = 128):
     
     return img
 
-def Table2Img(path, max_h, max_w, min_h, min_w):
-    img = cv2.imread(path)
-    h, w, _ = img.shape
-
-    max_scale_factor = min(max_h/h, max_w/w)
-    min_scale_factor = max(min_h/h, min_w/w)
-
-    if max_scale_factor < min_scale_factor:
-        scale_factor = max_scale_factor
-    else:            
-        scale_factor = random.uniform(min_scale_factor, max_scale_factor)
-
-    img = cv2.resize(img, (0, 0), fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_LINEAR)
-
-    return img
-
 def center2corner(xc,yc,W,H):
     x1 = xc - 0.5 * W
     y1 = yc - 0.5 * H
@@ -486,64 +470,54 @@ def prepare_background_imgs(text_folder : str, img_folder : str, fig_height : in
     
     return background_imgs, background_classes
 
-def process(smiles_list : List, table_list : List, num_data : int = 200000, max_smiles : int = 6, max_table : int = 2, img_size : int = 128, fig_height : int = 512, fig_width : int = 512, max_iters : int = 128, save_dir : str = "./dataset/detection", add_background : bool = False):
+def process(smiles_list : List, max_objects : int = 4, img_size : int = 128, fig_height : int = 512, fig_width : int = 512, max_iters : int = 128, save_dir : str = "./dataset/detection", add_background : bool = False):
     
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
     
+    num_img = 0
     col_ids = []
     col_smiles = []
-    col_table = []
     col_img = []
     col_n_molecules = []
     col_classes = []
     col_label = []
     
-    indx = 0
-    for num_img in tqdm(range(num_data), 'data generation proceeding...'):
-        n_table = random.randint(1, max_table+1)
-        n_smiles = random.randint(1, max_smiles+1)
-
-        random.shuffle(table_list)
-        sampled_table_list = table_list[0:n_table]
-
-        random.shuffle(smiles_list)
-        sampled_smiles_list = smiles_list[0:n_smiles]
-
-        smiles_images = [Smiles2Img(smiles, img_size) for smiles in sampled_smiles_list]
+    for n_object in range(1, max_objects + 1):
         
-        max_h = fig_height*0.3
-        max_w = fig_width*0.5
-        min_h = fig_height*0.1
-        min_w = fig_width*0.2
-
-        table_images = [Table2Img(path, max_h, max_w, min_h, min_w) for path in sampled_table_list]
-
-        if add_background:
-            background_images, background_classes = prepare_background_imgs("./dataset/sample_text", "./dataset/sample_img", fig_height, fig_width, 2, 4)
-            integrated_image, label = generate_PDF_image(table_images + smiles_images, background_images, fig_height, fig_width, max_iters)
-            classes = background_classes + [4 for _ in range(len(table_images))] + [3 for _ in range(len(smiles_images))]
-        else:
-            integrated_image, label = generate_integrated_image(table_images + smiles_images, fig_height, fig_width, max_iters)
-            classes = [4 for _ in range(len(table_images))] + [3 for _ in range(len(smiles_images))]
-
-        if integrated_image is not None:
-            indx += 1
-            img_dir = os.path.join(save_dir, "img_{}.jpg".format(str(indx).zfill(5)))
-            cv2.imwrite(img_dir, integrated_image)
+        # shuffle smiles
+        random.shuffle(smiles_list)
+        
+        # smiles with multi objects
+        new_smiles_list = [smiles_list[idx:idx+n_object] for idx in range(0, len(smiles_list)//n_object)]
+        
+        for smiles_set in tqdm(new_smiles_list, desc="process for generating detection with {} objects".format(n_object)):
+            images = [Smiles2Img(smiles, img_size) for smiles in smiles_set]
             
-            col_ids.append(num_img)
-            col_smiles.append(sampled_smiles_list)
-            col_table.append(sampled_table_list)
-            col_img.append(img_dir)
-            col_n_molecules.append(n_smiles)
-            col_label.append(label)
-            col_classes.append(classes)
+            if add_background:
+                background_images, background_classes = prepare_background_imgs("./dataset/sample_text", "./dataset/sample_img", fig_height, fig_width, 2, 4)
+                integrated_image, label = generate_PDF_image(images, background_images, fig_height, fig_width, max_iters)
+                classes = background_classes + [3 for _ in range(len(images))]
+            else:
+                integrated_image, label = generate_integrated_image(images, fig_height, fig_width, max_iters)
+                classes = [3 for _ in range(len(images))]
+
+            if integrated_image is not None:
+                img_dir = os.path.join(save_dir, "img_{}.jpg".format(str(num_img).zfill(5)))
+                cv2.imwrite(img_dir, integrated_image)
+                
+                col_ids.append(num_img)
+                col_smiles.append(smiles_set)
+                col_img.append(img_dir)
+                col_n_molecules.append(n_object)
+                col_label.append(label)
+                col_classes.append(classes)
+                
+                num_img += 1
 
     df = pd.DataFrame({
         "id":col_ids,
         "SMILES":col_smiles,
-        "table":col_table,
         "img":col_img,
         "n_molecules":col_n_molecules,
         "label":col_label,
@@ -557,8 +531,6 @@ if __name__=="__main__":
     
     df = pd.read_csv('./dataset/surechembl_cleansed.csv').sample(n=20000)
     smiles_list = df['SMILES'].to_list()
-
-    table_list = random.sample(glob2.glob('./dataset/cropped_table_images/*'), 20000)
     
-    df_detection = process(smiles_list, table_list, num_data=20, max_smiles=6, max_table=2, img_size=196, fig_height = 1280, fig_width=760, max_iters=128, save_dir = "./dataset/detection", add_background=True)
+    df_detection = process(smiles_list, max_objects=4, img_size=196, fig_height = 1280, fig_width=760, max_iters=128, save_dir = "./dataset/detection", add_background=True)
     df_detection.to_csv("./dataset/detection_data.csv")

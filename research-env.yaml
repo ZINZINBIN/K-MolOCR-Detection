@@ -1,4 +1,4 @@
-name: research-env
+name: mysite
 channels:
   - pytorch
   - nvidia
@@ -492,4 +492,4 @@ dependencies:
     - yacs==0.1.8
     - zict==2.2.0
     
-prefix: /home/suyoungpark/miniconda3/envs/research-env
+prefix: /home/suyoungpark/miniconda3/envs/mysite
