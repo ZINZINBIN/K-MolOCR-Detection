@@ -9,3 +9,6 @@ weights/*.pt
 
 # run file
 runs/*
+
+# results
+results/sample_test

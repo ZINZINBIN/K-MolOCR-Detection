@@ -1,11 +1,6 @@
-import pandas as pd
-import torch, os
-from torch.utils.data import DataLoader
-from sklearn.model_selection import train_test_split
+import torch
 from src.models.SSD300.model import SSD300
-from src.dataset import DetectionDataset
 from src.detect import detect
-from src.loss import MultiBoxLoss
 import argparse
 from PIL import Image
 
