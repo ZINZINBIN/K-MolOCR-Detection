@@ -22,8 +22,8 @@ def parsing():
     parser.add_argument("--gpu_num", type = int, default = 3)
 
     # batch size / sequence length / epochs / distance / num workers / pin memory use
-    parser.add_argument("--batch_size", type = int, default = 20)
-    parser.add_argument("--num_epoch", type = int, default = 16)
+    parser.add_argument("--batch_size", type = int, default = 32)
+    parser.add_argument("--num_epoch", type = int, default = 64)
     parser.add_argument("--verbose", type = int, default = 4)
     parser.add_argument("--num_workers", type = int, default = 4)
     parser.add_argument("--pin_memory", type = bool, default = True)
@@ -102,9 +102,9 @@ if __name__ == "__main__":
     test_loader = DataLoader(test_dataset, batch_size = args['batch_size'], shuffle = True, num_workers=4, collate_fn=test_dataset.collate_fn)
 
     if args['model'] == 'SSD':
-        model = SSD300(4)
+        model = SSD300(5)
     elif args['model'] == 'FasterRCNN':
-        model = FasterRCNNVGG16(n_fg_class=4)
+        model = FasterRCNNVGG16(n_fg_class=5)
         
     loss_fn = MultiBoxLoss(model.priors_cxcy)
     model.to(device)

@@ -59,7 +59,7 @@ save_best_dir = "./weights/{}_best.pt".format(tag)
 
 # load 
 print("=========== Load detection model ===========")
-model = SSD300(4)
+model = SSD300(5)
 model.to(device)
 model.eval()    
 model.load_state_dict(torch.load(save_best_dir, map_location = device))

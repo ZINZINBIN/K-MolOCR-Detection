@@ -63,7 +63,7 @@ def plot_image(img_path, annotation):
     
 
 # Label map
-voc_labels = ('text','figure','molecule')
+voc_labels = ('text','figure','molecule','table')
 label_map = {k: v + 1 for v, k in enumerate(voc_labels)}
 label_map['background'] = 0
 rev_label_map = {v: k for k, v in label_map.items()}  # Inverse mapping

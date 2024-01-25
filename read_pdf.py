@@ -52,7 +52,7 @@ if __name__ == "__main__":
     device = 'cpu'
     save_best_dir = "./weights/{}_best.pt".format(tag)
     
-    model = SSD300(4)
+    model = SSD300(5)
     model.to(device)
     model.eval()
     model.load_state_dict(torch.load(save_best_dir, map_location = device))
@@ -96,7 +96,7 @@ if __name__ == "__main__":
             
             locs = np.array(locs)
             labels = np.array(labels)
-            target_indx = np.where(labels == "molecule")
+            target_indx = np.where((labels == "molecule") | (labels == "table"))
             
             locs = locs[target_indx].tolist()
             labels = labels[target_indx].tolist()

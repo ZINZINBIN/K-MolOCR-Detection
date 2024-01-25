@@ -60,7 +60,7 @@ if __name__ == "__main__":
     device = 'cpu'
     save_best_dir = "./weights/{}_best.pt".format(tag)
     
-    model = SSD300(4)
+    model = SSD300(5)
     model.to(device)
     model.eval()
     

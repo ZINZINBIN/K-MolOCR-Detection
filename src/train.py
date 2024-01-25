@@ -123,7 +123,7 @@ def train(
     valid_loss_list = []
     
     best_epoch = 0
-    best_loss = torch.inf
+    best_loss = float('inf')
     
     if not os.path.isdir(exp_dir):
         os.mkdir(exp_dir)

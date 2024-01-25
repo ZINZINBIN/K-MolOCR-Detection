@@ -555,10 +555,10 @@ def process(smiles_list : List, table_list : List, num_data : int = 200000, max_
 # generate detection dataset
 if __name__=="__main__":
     
-    df = pd.read_csv('./dataset/surechembl_cleansed.csv').sample(n=20000)
+    df = pd.read_csv('./dataset/surechembl_cleansed.csv').sample(n=10000)
     smiles_list = df['SMILES'].to_list()
 
-    table_list = random.sample(glob2.glob('./dataset/cropped_table_images/*'), 20000)
+    table_list = random.sample(glob2.glob('./dataset/cropped_table_images/*'), 256)
     
-    df_detection = process(smiles_list, table_list, num_data=20, max_smiles=6, max_table=2, img_size=196, fig_height = 1280, fig_width=760, max_iters=128, save_dir = "./dataset/detection", add_background=True)
+    df_detection = process(smiles_list, table_list, num_data=80000, max_smiles=6, max_table=2, img_size=196, fig_height = 1280, fig_width=760, max_iters=128, save_dir = "./dataset/detection", add_background=True)
     df_detection.to_csv("./dataset/detection_data.csv")
