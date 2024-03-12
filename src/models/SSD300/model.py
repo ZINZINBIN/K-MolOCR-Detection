@@ -1,9 +1,13 @@
+'''
+    SSD300 tutorial: https://rain-bow.tistory.com/entry/Object-Detection-Object-Detection-%ED%8A%9C%ED%86%A0%EB%A6%AC%EC%96%BC-part-2
+'''
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from math import sqrt
 from itertools import product as product
 from src.utils import gcxgcy_to_cxcy, cxcy_to_xy, find_jaccard_overlap
+from pytorch_model_summary import summary
 import torchvision
 import warnings
 
@@ -249,7 +253,7 @@ class PredictionConvolutions(nn.Module):
             if isinstance(c, nn.Conv2d):
                 nn.init.xavier_uniform_(c.weight)
                 nn.init.constant_(c.bias, 0.)
-
+                
     def forward(self, conv4_3_feats, conv7_feats, conv8_2_feats, conv9_2_feats, conv10_2_feats, conv11_2_feats):
         """
         Forward propagation.
@@ -348,7 +352,11 @@ class SSD300(nn.Module):
 
         # Prior boxes
         self.priors_cxcy = self.create_prior_boxes()
-
+    
+    def summary(self, device : str = "cpu"):
+        img = torch.zeros((1,3,256,256)).to(device)
+        summary(self, img, batch_size = 1, show_input = True, print_summary=True)
+        
     def forward(self, image):
         """
         Forward propagation.
