@@ -3,9 +3,13 @@ from albumentations.pytorch import ToTensorV2
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import matplotlib.patches as patches
-import random
-import torch
+import random, os, torch
 import torchvision.transforms.functional as FT
+from typing import Optional
+import fitz
+from io import BytesIO
+from PIL import Image
+import base64
 
 def get_custom_transforms(*args):
     train_transform = A.Compose(
@@ -59,7 +63,7 @@ def plot_image(img_path, annotation):
     
 
 # Label map
-voc_labels = ('text','figure','molecule')
+voc_labels = ('text','figure','molecule','table')
 label_map = {k: v + 1 for v, k in enumerate(voc_labels)}
 label_map['background'] = 0
 rev_label_map = {v: k for k, v in label_map.items()}  # Inverse mapping
@@ -531,3 +535,27 @@ def transform(image, boxes, labels, split):
     new_image = FT.normalize(new_image, mean=mean, std=std)
 
     return new_image, new_boxes, new_labels
+
+def PDF2Image(filepath:str, save_img:bool = False, save_img_dir:Optional[str] = None):
+    
+    doc = fitz.open(filepath)
+    imgs = []
+    
+    if save_img:
+        if not os.path.exists(save_img_dir):
+            os.makedirs(save_img_dir)
+    
+    for i, page in enumerate(doc):
+        img = page.get_pixmap().tobytes()
+        img = BytesIO(img)
+        img = Image.open(img)
+        img = img.convert('RGB')
+        
+        if save_img:
+            filename = filepath.split("/")[-1].split(".")[0] + str(i) + ".png"
+            filepath = os.path.join(save_img_dir, filename)
+            img.save(filepath)
+            
+        imgs.append(img)
+        
+    return imgs
