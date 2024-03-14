@@ -11,4 +11,4 @@ weights/*.pt
 runs/*
 
 # results
-results/sample_test
+results/*

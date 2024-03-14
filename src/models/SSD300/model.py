@@ -354,7 +354,7 @@ class SSD300(nn.Module):
         self.priors_cxcy = self.create_prior_boxes()
     
     def summary(self, device : str = "cpu"):
-        img = torch.zeros((1,3,256,256)).to(device)
+        img = torch.zeros((1,3,600,900)).to(device)
         summary(self, img, batch_size = 1, show_input = True, print_summary=True)
         
     def forward(self, image):
@@ -489,7 +489,6 @@ class SSD300(nn.Module):
                 overlap = find_jaccard_overlap(class_decoded_locs, class_decoded_locs)  # (n_qualified, n_min_score)
 
                 # Non-Maximum Suppression (NMS)
-
                 # A torch.uint8 (byte) tensor to keep track of which predicted boxes to suppress
                 # 1 implies suppress, 0 implies don't suppress
                 suppress = torch.zeros((n_above_min_score), dtype=torch.uint8).to(device)  # (n_qualified)

@@ -97,9 +97,9 @@ if __name__ == "__main__":
     print("valid data : {}".format(valid_dataset.__len__()))
     print("test data : {}".format(test_dataset.__len__()))
 
-    train_loader = DataLoader(train_dataset, batch_size = args['batch_size'], shuffle = True, num_workers=4, collate_fn=train_dataset.collate_fn)
-    valid_loader = DataLoader(valid_dataset, batch_size = args['batch_size'], shuffle = True, num_workers=4, collate_fn=valid_dataset.collate_fn)
-    test_loader = DataLoader(test_dataset, batch_size = args['batch_size'], shuffle = True, num_workers=4, collate_fn=test_dataset.collate_fn)
+    train_loader = DataLoader(train_dataset, batch_size = args['batch_size'], shuffle = True, num_workers=4, pin_memory=True, drop_last = True, persistent_workers=True, collate_fn=train_dataset.collate_fn)
+    valid_loader = DataLoader(valid_dataset, batch_size = args['batch_size'], shuffle = True, num_workers=4, pin_memory=True, drop_last = True, persistent_workers=True, collate_fn=valid_dataset.collate_fn)
+    test_loader = DataLoader(test_dataset, batch_size = args['batch_size'], shuffle = True, num_workers=4, pin_memory=True, drop_last = True, persistent_workers=True, collate_fn=test_dataset.collate_fn)
 
     if args['model'] == 'SSD':
         model = SSD300(5)

@@ -1,4 +1,5 @@
-import torch, os
+import torch, os, random
+import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from typing import Literal, Optional, List, Dict
 from torch.utils.tensorboard import SummaryWriter
@@ -13,12 +14,19 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 # anomaly detection from training process : backward process
 torch.autograd.set_detect_anomaly(True)
 
+def set_random_seeds(random_seed:int = 42):
+    torch.manual_seed(random_seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    np.random.seed(random_seed)
+    random.seed(random_seed)
+
 def get_distributed_loader(train_dataset:Dataset, valid_dataset : Dataset, num_replicas : int, rank : int, num_workers : int, batch_size : int = 32):
     train_sampler = DistributedSampler(train_dataset, num_replicas=num_replicas, rank = rank, shuffle = True)
     valid_sampler = DistributedSampler(valid_dataset, num_replicas=num_replicas, rank = rank, shuffle = True)
 
-    train_loader = DataLoader(train_dataset, batch_size, sampler = train_sampler, num_workers = num_workers, pin_memory=True, drop_last = True, persistent_workers=True)
-    valid_loader = DataLoader(valid_dataset, batch_size, sampler = valid_sampler, num_workers = num_workers, pin_memory=True, drop_last = True, persistent_workers=True)
+    train_loader = DataLoader(train_dataset, batch_size, sampler = train_sampler, num_workers = num_workers, pin_memory=True, drop_last = True, persistent_workers=True, collate_fn=train_dataset.collate_fn)
+    valid_loader = DataLoader(valid_dataset, batch_size, sampler = valid_sampler, num_workers = num_workers, pin_memory=True, drop_last = True, persistent_workers=True, collate_fn=valid_dataset.collate_fn)
 
     return train_loader, valid_loader, train_sampler, valid_sampler
 
@@ -38,14 +46,11 @@ def train_per_epoch(
     total_size = 0 
     ddp_model.train()
     
-    for batch_idx, (data, target) in enumerate(dataloader):
+    for batch_idx, (data, target) in enumerate(train_loader):
         
         optimizer.zero_grad()
-        
-        for param in model.parameters():
-            param.grad = None
             
-        output_locs, output_score = model(data.to(device))
+        output_locs, output_score = ddp_model(data.to(device))
         loss = loss_fn(output_locs, output_score, target['boxes'], target['classes'])
             
         if not torch.isfinite(loss):
@@ -55,7 +60,7 @@ def train_per_epoch(
             loss.backward()
         
         if max_norm_grad:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm_grad)
+            torch.nn.utils.clip_grad_norm_(ddp_model.parameters(), max_norm_grad)
         
         optimizer.step()
         
@@ -76,15 +81,12 @@ def train_per_epoch(
     valid_loss = 0
     total_size = 0
 
-    for batch_idx, (data, target) in enumerate(dataloader):
+    for batch_idx, (data, target) in enumerate(valid_loader):
         with torch.no_grad():
             
             optimizer.zero_grad()
         
-            for param in model.parameters():
-                param.grad = None
-            
-            output_locs, output_score = model(data.to(device))
+            output_locs, output_score = ddp_model(data.to(device))
             loss = loss_fn(output_locs, output_score, target['boxes'], target['classes'])
            
             if not torch.isfinite(loss):
@@ -127,7 +129,7 @@ def train_per_proc(
     valid_loss_list = []
 
     best_epoch = 0
-    best_loss = torch.inf
+    best_loss = np.inf
     
     if not os.path.isdir(tensorboard_dir):
         os.mkdir(tensorboard_dir)
@@ -196,10 +198,10 @@ def train_per_proc(
             if best_loss > valid_loss:
                 best_loss = valid_loss
                 best_epoch  = epoch
-                # torch.save(model.state_dict(), save_best)
+                torch.save(model.state_dict(), save_best)
 
             # save the last parameters
-            # torch.save(model.state_dict(), model_filepath)
+            torch.save(model.state_dict(), model_filepath)
             
         dist.barrier()
     

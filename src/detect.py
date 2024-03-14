@@ -1,11 +1,13 @@
 from PIL import Image, ImageDraw, ImageFont
 import torchvision.transforms.functional as FT
 from typing import Tuple, List
-from src.utils import rev_label_map, label_color_map
+from src.utils import rev_label_map, label_color_map, PDF2Image
 from src.models.FasterRCNN.FasterRCNN import FasterRCNN
 from src.models.SSD300.model import SSD300
+from tqdm.auto import tqdm
 import torch.nn as nn
-import torch
+import numpy as np
+import torch, os
 
 def transform(image, resize : Tuple = (300, 300), mean : List = [0.485, 0.456, 0.406], std : List = [0.229, 0.224, 0.225]):
     new_image = FT.resize(image, resize)
@@ -85,3 +87,30 @@ def detect(original_image, model:nn.Module, device:str, min_score, max_overlap, 
     
     else:
         return annotated_image, is_success
+    
+def detect_chem_from_PDF(model : nn.Module, device : str, PDF_filepath:str, save_filepath:str, min_score, max_overlap, top_k):
+    
+    imgs = PDF2Image(PDF_filepath, False, None)
+    
+    if not os.path.exists(PDF_filepath):
+        print("File not valid: No file in directory")
+        return
+    
+    if not os.path.exists(save_filepath):
+        os.makedirs(save_filepath)
+        
+    image_ids = []
+    classes = []
+    positions = []
+             
+    for idx, img in enumerate(tqdm(imgs, "Inference process with PDF:{}".format(PDF_filepath))): 
+        
+        annot, is_success, locs, labels = detect(img, model, device, min_score = min_score, max_overlap = max_overlap, top_k = top_k, return_results=True)
+        
+        if not is_success:
+            continue
+        
+        save_img_path = os.path.join(save_filepath, "page{:03d}.jpg".format(idx + 1))
+        annot.save(save_img_path)
+        
+    print("Inference process complete")

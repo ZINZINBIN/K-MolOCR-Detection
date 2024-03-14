@@ -22,8 +22,8 @@ def parsing():
     parser.add_argument("--save_dir", type = str, default = "./results")
 
     # batch size / sequence length / epochs / distance / num workers / pin memory use
-    parser.add_argument("--batch_size", type = int, default = 100)
-    parser.add_argument("--num_epoch", type = int, default = 1)
+    parser.add_argument("--batch_size", type = int, default = 32)
+    parser.add_argument("--num_epoch", type = int, default = 128)
     parser.add_argument("--verbose", type = int, default = 4)
     parser.add_argument("--num_workers", type = int, default = 4)
     parser.add_argument("--pin_memory", type = bool, default = True)
@@ -36,12 +36,6 @@ def parsing():
     args = vars(parser.parse_args())
     return args
 
-# torch device state
-print("=============== device setup ===============")
-print("torch device avaliable : ", torch.cuda.is_available())
-print("torch current device : ", torch.cuda.current_device())
-print("torch device num : ", torch.cuda.device_count())
-
 # torch cuda initialize and clear cache
 torch.cuda.init()
 torch.cuda.empty_cache()
@@ -52,6 +46,12 @@ if __name__ == "__main__":
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "29500"
     
+    # torch device state
+    print("=============== device setup ===============")
+    print("torch device avaliable : ", torch.cuda.is_available())
+    print("torch current device : ", torch.cuda.current_device())
+    print("torch device num : ", torch.cuda.device_count())
+        
     # parsing
     args = parsing()
     
@@ -89,10 +89,6 @@ if __name__ == "__main__":
     print("valid data : {}".format(valid_dataset.__len__()))
     print("test data : {}".format(test_dataset.__len__()))
 
-    train_loader = DataLoader(train_dataset, batch_size = args['batch_size'], shuffle = True, num_workers=4, collate_fn=train_dataset.collate_fn)
-    valid_loader = DataLoader(valid_dataset, batch_size = args['batch_size'], shuffle = True, num_workers=4, collate_fn=valid_dataset.collate_fn)
-    test_loader = DataLoader(test_dataset, batch_size = args['batch_size'], shuffle = True, num_workers=4, collate_fn=test_dataset.collate_fn)
-
     if args['model'] == 'SSD':
         model = SSD300(5)
     elif args['model'] == 'FasterRCNN':
@@ -105,8 +101,8 @@ if __name__ == "__main__":
     train(
         batch_size = args['batch_size'],
         model = model,
-        train_dataset = train_data,
-        valid_dataset = valid_data,
+        train_dataset = train_dataset,
+        valid_dataset = valid_dataset,
         random_seed = args['random_seed'],
         resume = False,
         learning_rate  = args['lr'],
@@ -116,5 +112,5 @@ if __name__ == "__main__":
         num_epoch = args['num_epoch'],
         verbose = args['verbose'],
         save_best = save_best_dir,
-        tensorboard_dir = tensorboard_dir,
+        tensorboard_dir = exp_dir,
     )

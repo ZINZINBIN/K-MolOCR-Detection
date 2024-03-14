@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import torch, os
 from src.models.SSD300.model import SSD300
-from src.detect import detect
+from src.detect import detect, detect_chem_from_PDF
 import argparse
 import json
 
@@ -14,7 +14,8 @@ def parsing():
     
     # tag and result directory
     parser.add_argument("--tag", type = str, default = "SSD")
-    parser.add_argument("--save_dir", type = str, default = "./results")
+    parser.add_argument("--pdf_filepath", type = str, default = "./dataset/sample_test_independent/AU2018379499A1.pdf")
+    parser.add_argument("--save_filepath", type = str, default = "./results/AU2018379499A1")
     
     # detection setup
     parser.add_argument("--min_score", type = float, default = 0.2)
@@ -50,75 +51,11 @@ if __name__ == "__main__":
         device = 'cpu'
     
     device = 'cpu'
-    save_best_dir = "./weights/{}_best.pt".format(tag)
+    save_best_dir = "./weights/{}_ddp_best.pt".format(tag)
     
     model = SSD300(5)
     model.to(device)
     model.eval()
     model.load_state_dict(torch.load(save_best_dir, map_location = device))
     
-    paths = [
-        "./dataset/sample_test/file001.pdf",
-        "./dataset/sample_test/file002.pdf",
-        "./dataset/sample_test/file003.pdf",
-    ]
-    
-    if not os.path.exists("./results/sample_test/"):
-        os.mkdir("./results/sample_test/")
-
-    page_ids = 0
-    sample_ids = 0
-
-    image_ids = []
-    classes = []
-    positions = []
-    
-    num_pages = 0
-    
-    print("# Molecular detection proceeding..")
-    
-    for file_idx, path in enumerate(paths):
-
-        imgs = PDF2Image(path, False, None)
-        save_path = "./results/sample_test/file{:03d}".format(file_idx + 1)
-        
-        if not os.path.exists(save_path):
-            os.mkdir(save_path)
-        
-        for idx, img in enumerate(imgs): 
-            annot, is_success, locs, labels = detect(img, model, device, min_score = args['min_score'], max_overlap = args['max_overlap'], top_k = args['top_k'], return_results=True)
-            
-            if not is_success:
-                continue
-            
-            img_path = "./results/sample_test/file{:03d}/page{:03d}.jpg".format(file_idx + 1, idx + 1)
-            annot.save(img_path)
-            
-            locs = np.array(locs)
-            labels = np.array(labels)
-            target_indx = np.where((labels == "molecule") | (labels == "table"))
-            
-            locs = locs[target_indx].tolist()
-            labels = labels[target_indx].tolist()
-            
-            image_ids.extend([idx + 1 + num_pages for _ in range(len(locs))])
-            positions.extend(locs)
-            classes.extend(labels)
-        
-        num_pages += len(imgs)
-
-    print("# Detection process complete")
-
-    ids = [i for i in range(len(image_ids))]
-    
-    dict4json = {
-        "id":ids,
-        "image_id":image_ids,
-        "class":classes,
-        "position":positions
-    }
-    
-    with open("./results/sample_test.json", 'w', encoding='utf-8') as file:
-        json.dump(dict4json, file, indent="\t")
-    
-    print("# JSON file conversion complete")
+    detect_chem_from_PDF(model = model, device = device, PDF_filepath = args['pdf_filepath'], save_filepath = args['save_filepath'], min_score = args['min_score'], max_overlap = args['max_overlap'], top_k = args['top_k'])

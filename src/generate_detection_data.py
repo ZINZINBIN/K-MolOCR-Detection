@@ -572,7 +572,7 @@ def process(smiles_list : List, table_list : List, num_data : int = 200000, max_
 # generate detection dataset
 if __name__=="__main__":
     
-    df = pd.read_csv('./dataset/surechembl_cleansed.csv').sample(n=100000)
+    df = pd.read_csv('./dataset/surechembl_cleansed.csv').sample(n=80000)
     smiles_list = df['SMILES'].to_list()
 
     table_list = random.sample(glob2.glob('./dataset/cropped_table_images/*'), 256)
@@ -598,5 +598,5 @@ if __name__=="__main__":
         
         background_pdf_list.extend(imgs)
     
-    df_detection = process(smiles_list, table_list, num_data=400000, max_smiles=8, max_table=2, img_size=112, fig_height = 900, fig_width=600, max_iters=64, save_dir = "./dataset/detection", add_background=True, use_pdf_background = True, background_pdf_list = background_pdf_list)
+    df_detection = process(smiles_list, table_list, num_data=200000, max_smiles=8, max_table=2, img_size=112, fig_height = 900, fig_width=600, max_iters=64, save_dir = "./dataset/detection", add_background=True, use_pdf_background = True, background_pdf_list = background_pdf_list)
     df_detection.to_csv("./dataset/detection_data.csv")
