@@ -4,6 +4,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.autograd import Variable
 from math import sqrt
 from itertools import product as product
 from src.utils import gcxgcy_to_cxcy, cxcy_to_xy, find_jaccard_overlap
@@ -12,6 +13,19 @@ import torchvision
 import warnings
 
 warnings.filterwarnings(action='ignore')
+
+class NoiseLayer(nn.Module):
+    def __init__(self, mean : float = 0, std : float = 1e-2):
+        super().__init__()
+        self.mean = mean
+        self.std = std
+        
+    def forward(self, x : torch.Tensor):
+        if self.training:
+            noise = Variable(torch.ones_like(x).to(x.device) * self.mean + torch.randn(x.size()).to(x.device) * self.std)
+            return x + noise
+        else:
+            return x
 
 def decimate(tensor, m):
     """
@@ -352,17 +366,22 @@ class SSD300(nn.Module):
 
         # Prior boxes
         self.priors_cxcy = self.create_prior_boxes()
+        
+        self.noise = NoiseLayer(0,0.1)
     
     def summary(self, device : str = "cpu"):
         img = torch.zeros((1,3,600,900)).to(device)
         summary(self, img, batch_size = 1, show_input = True, print_summary=True)
         
-    def forward(self, image):
+    def forward(self, image:torch.Tensor):
         """
         Forward propagation.
         :param image: images, a tensor of dimensions (N, 3, 300, 300)
         :return: 8732 locations and class scores (i.e. w.r.t each prior box) for each image
         """
+        # Add Gaussian noise for robustness
+        image = self.noise(image)
+        
         # Run VGG base network convolutions (lower level feature map generators)
         conv4_3_feats, conv7_feats = self.base(image)  # (N, 512, 38, 38), (N, 1024, 19, 19)
 

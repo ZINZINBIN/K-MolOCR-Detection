@@ -12,3 +12,6 @@ runs/*
 
 # results
 results/*
+
+# config (AWS keys)
+config/*
