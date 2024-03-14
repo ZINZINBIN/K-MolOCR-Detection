@@ -4,8 +4,29 @@ import numpy as np
 from typing import Union
 from src.utils import find_jaccard_overlap, cxcy_to_gcxgcy, xy_to_cxcy
 
+class FocalLoss(nn.Module):
+    def __init__(self, weight : Optional[torch.Tensor] = None, gamma : float = 2.0):
+        super(FocalLoss, self).__init__()
+        assert gamma >= 0, "gamma should be positive"
+        self.gamma = gamma
+        self.weight = weight
+    
+    def update_weight(self, weight : Optional[torch.Tensor] = None):
+        self.weight = weight
+
+    def compute_focal_loss(self, inputs:torch.Tensor, gamma:float, alpha : torch.Tensor):
+        p = torch.exp(-inputs)
+        loss = alpha * (1-p) ** gamma * inputs
+        return loss.sum()
+
+    def forward(self, input : torch.Tensor, target : torch.Tensor):
+        weight = self.weight.to(input.device)
+        alpha = weight.gather(0, target.data.view(-1))
+        alpha = Variable(alpha)
+        return self.compute_focal_loss(F.cross_entropy(input, target, reduction = 'none', weight = None), self.gamma, alpha)
+
 class MultiBoxLoss(nn.Module):
-    def __init__(self, priors_cxcy, threshold : float = 0.5, neg_pos_ratio : float = 3.0, alpha : float = 1.0):
+    def __init__(self, priors_cxcy, threshold : float = 0.5, neg_pos_ratio : float = 3.0, alpha : float = 1.0, use_focal_loss : bool = False):
         super().__init__()
         self.priors_cxcy = priors_cxcy
         self.priors_xy = self.cxcy_to_xy(priors_cxcy)
@@ -15,7 +36,7 @@ class MultiBoxLoss(nn.Module):
         self.alpha = alpha
         
         self.smooth_l1 = nn.L1Loss()
-        self.cross_entropy = nn.CrossEntropyLoss(reduce = False)
+        self.cross_entropy = nn.CrossEntropyLoss(reduce = False) if not use_focal_loss else FocalLoss(torch.Tensor([0.2,0.2,0.2,0.2,0.2]), 2.0)
         
     def cxcy_to_xy(self, cxcy:Union[torch.Tensor, np.ndarray]):
         return torch.cat([cxcy[:, :2] - (cxcy[:, 2:] / 2), cxcy[:, :2] + (cxcy[:, 2:] / 2)], 1) 
