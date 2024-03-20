@@ -1,7 +1,9 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
-from typing import Union
+from typing import Union, Optional
+from torch.autograd import Variable
 from src.utils import find_jaccard_overlap, cxcy_to_gcxgcy, xy_to_cxcy
 
 class FocalLoss(nn.Module):
@@ -17,13 +19,13 @@ class FocalLoss(nn.Module):
     def compute_focal_loss(self, inputs:torch.Tensor, gamma:float, alpha : torch.Tensor):
         p = torch.exp(-inputs)
         loss = alpha * (1-p) ** gamma * inputs
-        return loss.sum()
+        return loss
 
     def forward(self, input : torch.Tensor, target : torch.Tensor):
         weight = self.weight.to(input.device)
         alpha = weight.gather(0, target.data.view(-1))
         alpha = Variable(alpha)
-        return self.compute_focal_loss(F.cross_entropy(input, target, reduction = 'none', weight = None), self.gamma, alpha)
+        return self.compute_focal_loss(F.cross_entropy(input, target, reduce = False, weight = None), self.gamma, alpha)
 
 class MultiBoxLoss(nn.Module):
     def __init__(self, priors_cxcy, threshold : float = 0.5, neg_pos_ratio : float = 3.0, alpha : float = 1.0, use_focal_loss : bool = False):

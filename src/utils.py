@@ -61,7 +61,6 @@ def plot_image(img_path, annotation):
 
     plt.show()
     
-
 # Label map
 voc_labels = ('text','figure','molecule','table')
 label_map = {k: v + 1 for v, k in enumerate(voc_labels)}
@@ -328,6 +327,30 @@ def expand(image, boxes, filler):
 
     return new_image, new_boxes
 
+def crop_mol_img(image, det_boxes, det_labels):
+    object_img_list = []
+    box_location = []
+    locs = []
+    
+    # collect box location and labels
+    for i in range(det_boxes.size(0)):
+        box_location = det_boxes[i].tolist()
+        locs.append(box_location)
+        labels.append(det_labels[i])
+        
+    # select molecule image
+    locs = np.array(locs)
+    labels = np.array(labels)
+    target_indx = np.where((labels == "molecule"))
+    
+    locs = locs[target_indx].tolist()
+    labels = labels[target_indx].tolist()
+        
+    for loc in locs:
+        object_img_list.append(image[:,loc[0]:loc[2],loc[1]:loc[3]])
+    
+    return object_img_list 
+
 def random_crop(image, boxes, labels):
     """
     Performs a random crop in the manner stated in the paper. Helps to learn to detect larger and partial objects.
@@ -480,6 +503,24 @@ def photometric_distort(image):
 
     return new_image
 
+def swap_channels(image, swap):
+    image = image[swap,:,:]
+    return image
+
+def random_light_noise(image):
+    perms = ((0, 1, 2), (0, 2, 1),(1, 0, 2), (1, 2, 0),(2, 0, 1), (2, 1, 0))
+    swap = perms[random.randint(0, len(perms)-1)]
+    image = swap_channels(image, swap)
+    return image
+
+def random_brightness(image, delta :int = 32):
+    delta = random.uniform(-delta, delta)
+    image += delta
+    return image
+
+def random_saturation(image, lower = 0.5, upper = 1.5):
+    image[random.randint(0,2),:,:] *= random.uniform(lower, upper)
+    return image
 
 def transform(image, boxes, labels, split):
     """
@@ -506,7 +547,7 @@ def transform(image, boxes, labels, split):
     if split == 'TRAIN':
         # A series of photometric distortions in random order, each with 50% chance of occurrence, as in Caffe repo
         new_image = photometric_distort(new_image)
-
+        
         # Convert PIL image to Torch tensor
         new_image = FT.to_tensor(new_image)
 
@@ -530,6 +571,19 @@ def transform(image, boxes, labels, split):
 
     # Convert PIL image to Torch tensor
     new_image = FT.to_tensor(new_image)
+    
+    if split == 'TRAIN':
+        # Add random light noise with a 50% chance
+        if random.random() < 0.5:
+            new_image = random_light_noise(new_image)
+            
+        # Random birghtness with a 50% chance
+        if random.random() < 0.5:
+            new_image = random_brightness(new_image)
+            
+        # Random saturation with a 50% chance
+        if random.random() < 0.5:
+            new_image = random_saturation(new_image, 0.5, 1.5)
 
     # Normalize by mean and standard deviation of ImageNet data that our base VGG was trained on
     new_image = FT.normalize(new_image, mean=mean, std=std)

@@ -5,7 +5,9 @@ import numpy as np
 import torch, os
 from src.models.SSD300.model import SSD300
 from src.detect import detect
+from src.utils import crop_mol_img
 from config.API_key import API_KEY
+from tqdm.auto import tqdm
 import argparse
 import json
 
@@ -107,7 +109,7 @@ if __name__ == "__main__":
         if not os.path.exists(save_path):
             os.mkdir(save_path)
         
-        for idx, img in enumerate(imgs): 
+        for idx, img in enumerate(tqdm(imgs, desc = "Detection process for file path: {}".format(path))): 
             annot, is_success, locs, labels = detect(img, model, device, min_score = args['min_score'], max_overlap = args['max_overlap'], top_k = args['top_k'], return_results=True)
             
             if not is_success:

@@ -17,7 +17,7 @@ def parsing():
     parser.add_argument("--random_seed", type = int, default = 42)
     
     # tag and result directory
-    parser.add_argument("--tag", type = str, default = "ddp")
+    parser.add_argument("--tag", type = str, default = "focal_ddp")
     parser.add_argument("--model", type = str, default = "SSD", choices = ["SSD", "FasterRCNN", "RCNN"])
     parser.add_argument("--save_dir", type = str, default = "./results")
 
@@ -27,6 +27,7 @@ def parsing():
     parser.add_argument("--verbose", type = int, default = 4)
     parser.add_argument("--num_workers", type = int, default = 4)
     parser.add_argument("--pin_memory", type = bool, default = True)
+    parser.add_argument("--use_focal_loss", type = bool, default = True)
     parser.add_argument("--train_test_ratio", type = float, default = 0.2)
 
     # learning rate, step size and decay constant
@@ -94,7 +95,7 @@ if __name__ == "__main__":
     elif args['model'] == 'FasterRCNN':
         model = FasterRCNNVGG16(n_fg_class=5)
         
-    loss_fn = MultiBoxLoss(model.priors_cxcy)
+    loss_fn = MultiBoxLoss(model.priors_cxcy, use_focal_loss = args['use_focal_loss'])
     model.summary()
 
     print("=============== Training process ===============")

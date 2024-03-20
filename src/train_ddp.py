@@ -132,7 +132,7 @@ def train_per_proc(
     best_loss = np.inf
     
     if not os.path.isdir(tensorboard_dir):
-        os.mkdir(tensorboard_dir)
+        os.makedirs(tensorboard_dir)
     
     # tensorboard setting
     if dist.get_rank() == 0 and tensorboard_dir:
