@@ -24,7 +24,6 @@ class DetectionDataset(Dataset):
         # target
         boxes = torch.as_tensor(ast.literal_eval(self.labels[idx]), dtype = torch.float32)
         n_mols = torch.as_tensor(self.df['n_molecules'].values[idx], dtype = torch.int32)
-        # classes = torch.as_tensor([1 for _ in range(n_mols)], dtype = torch.int32)
         classes = torch.as_tensor(ast.literal_eval(self.classes[idx]), dtype = torch.int32)
         
         # preprocessing

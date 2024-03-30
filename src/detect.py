@@ -70,8 +70,7 @@ def detect(original_image, model:nn.Module, device:str, min_score, max_overlap, 
         textbox_location = [box_location[0], box_location[1] - text_size[1], box_location[0] + text_size[0] + 4.,
                             box_location[1]]
         draw.rectangle(xy=textbox_location, fill=label_color_map[det_labels[i]])
-        draw.text(xy=text_location, text=det_labels[i].upper(), fill='white',
-                  font=font)
+        draw.text(xy=text_location, text=det_labels[i].upper(), fill='white', font=font)
     del draw
     
     is_success = True

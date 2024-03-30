@@ -7,6 +7,7 @@ from src.models.FasterRCNN.FasterRCNN import FasterRCNNVGG16
 from src.dataset import DetectionDataset
 from src.loss import MultiBoxLoss
 from src.train import train
+from src.evaluate import evaluate
 import argparse
 
 # argument parser
@@ -32,12 +33,23 @@ def parsing():
     # optimizer : SGD, RMSProps, Adam, AdamW
     parser.add_argument("--optimizer", type = str, default = "AdamW", choices=["SGD", "RMSProps", "Adam", "AdamW"])
     
+    # Loss function setup
+    parser.add_argument("--threshold", type = float, default = 0.5)
+    parser.add_argument("--neg_pos_ratio", type = float, default = 3.0)
+    parser.add_argument("--alpha", type = float, default = 1.0)
+    parser.add_argument("--use_focal_loss", type = bool, default = False)
+    
     # learning rate, step size and decay constant
     parser.add_argument("--lr", type = float, default = 2e-4)
     parser.add_argument("--use_scheduler", type = bool, default = True)
     parser.add_argument("--step_size", type = int, default = 4)
     parser.add_argument("--gamma", type = float, default = 0.95)
     parser.add_argument("--max_norm_grad", type = float, default = 1.0)
+    
+    # detection setup
+    parser.add_argument("--min_score", type = float, default = 0.5)
+    parser.add_argument("--max_overlap", type = float, default = 0.5)
+    parser.add_argument("--top_k", type = int, default = 8)
 
     args = vars(parser.parse_args())
     return args
@@ -97,16 +109,23 @@ if __name__ == "__main__":
     print("valid data : {}".format(valid_dataset.__len__()))
     print("test data : {}".format(test_dataset.__len__()))
 
-    train_loader = DataLoader(train_dataset, batch_size = args['batch_size'], shuffle = True, num_workers=4, pin_memory=True, drop_last = True, persistent_workers=True, collate_fn=train_dataset.collate_fn)
-    valid_loader = DataLoader(valid_dataset, batch_size = args['batch_size'], shuffle = True, num_workers=4, pin_memory=True, drop_last = True, persistent_workers=True, collate_fn=valid_dataset.collate_fn)
-    test_loader = DataLoader(test_dataset, batch_size = args['batch_size'], shuffle = True, num_workers=4, pin_memory=True, drop_last = True, persistent_workers=True, collate_fn=test_dataset.collate_fn)
+    train_loader = DataLoader(train_dataset, batch_size = args['batch_size'], shuffle = True, num_workers=8, pin_memory=True, drop_last = True, persistent_workers=True, collate_fn=train_dataset.collate_fn)
+    valid_loader = DataLoader(valid_dataset, batch_size = args['batch_size'], shuffle = True, num_workers=8, pin_memory=True, drop_last = True, persistent_workers=True, collate_fn=valid_dataset.collate_fn)
+    test_loader = DataLoader(test_dataset, batch_size = args['batch_size'], shuffle = True, num_workers=8, pin_memory=True, drop_last = True, persistent_workers=True, collate_fn=test_dataset.collate_fn)
 
     if args['model'] == 'SSD':
         model = SSD300(5)
     elif args['model'] == 'FasterRCNN':
         model = FasterRCNNVGG16(n_fg_class=5)
         
-    loss_fn = MultiBoxLoss(model.priors_cxcy)
+    loss_fn = MultiBoxLoss(
+        model.priors_cxcy, 
+        threshold = args['threshold'], 
+        neg_pos_ratio = args['neg_pos_ratio'], 
+        alpha = args['alpha'],
+        use_focal_loss = args['use_focal_loss']
+    )
+    
     model.to(device)
     
     # optimizer
@@ -124,7 +143,7 @@ if __name__ == "__main__":
     # scheduler
     if args["use_scheduler"]:    
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size = args['step_size'], gamma=args['gamma'])
-        
+   
     print("=============== Training process ===============")
     train_loss, valid_loss = train(
         train_loader,
@@ -141,3 +160,19 @@ if __name__ == "__main__":
         exp_dir = exp_dir,
         max_norm_grad = 1.0,
     )
+    
+    print("=============== Evaluation process ===============")
+    model.eval()
+    model.load_state_dict(torch.load(save_best_dir, map_location = device))
+    
+    test_loss, APs, mAP = evaluate(
+        dataloader = test_loader, 
+        model = model,
+        loss_fn = loss_fn,
+        device = device,
+        min_score = args['min_score'],
+        max_overlap = args['max_overlap'],
+        top_k = args['top_k'],
+    )
+    
+    print("test loss : {:.3f}, APs : {:.3f}, mAPs:{:.3f}".format(test_loss, APs['molecule'], mAP))

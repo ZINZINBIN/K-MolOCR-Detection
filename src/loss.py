@@ -80,6 +80,7 @@ class MultiBoxLoss(nn.Module):
 
             # Labels for each prior
             label_for_each_prior = labels[i].to(device)[object_for_each_prior]  # (8732)
+            
             # Set priors whose overlaps with objects are less than the threshold to be background (no object)
             label_for_each_prior[overlap_for_each_prior < self.threshold] = 0  # (8732)
 
@@ -121,10 +122,3 @@ class MultiBoxLoss(nn.Module):
         conf_loss = (conf_loss_hard_neg.sum() + conf_loss_pos.sum()) / n_positives.sum().float()  # (), scalar
 
         return conf_loss + self.alpha * loc_loss
-    
-class FasterRCNNLoss(nn.Module):
-    def __init__(self):
-        super().__init__()
-    
-    def forward(self, predicted_locs:torch.Tensor, predicted_scores:torch.Tensor, boxes:torch.Tensor, labels:torch.Tensor):
-        return None

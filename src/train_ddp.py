@@ -1,4 +1,4 @@
-import torch, os, random
+import torch, os, random, warnings
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from typing import Literal, Optional, List, Dict
@@ -11,8 +11,12 @@ import torch.distributed as dist
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 
+from src.evaluate import evaluate
+
 # anomaly detection from training process : backward process
 torch.autograd.set_detect_anomaly(True)
+
+warnings.filterwarnings(action = "ignore")
 
 def set_random_seeds(random_seed:int = 42):
     torch.manual_seed(random_seed)
@@ -111,6 +115,7 @@ def train_per_proc(
     model : torch.nn.Module,
     train_dataset : Dataset,
     valid_dataset : Dataset,
+    test_dataset:Dataset,
     loss_fn : torch.nn.Module,
     max_norm_grad : Optional[float] = None,
     model_filepath : str = "./weights/distributed.pt",
@@ -121,6 +126,10 @@ def train_per_proc(
     verbose : Optional[int] = 8,
     save_best : str = "./weights/best.pt",
     tensorboard_dir : Optional[str] = None,
+    min_score : float = 0.5,
+    max_overlap : float = 0.5,
+    top_k :int = 8,
+    optimizer_type:Literal['SGD', 'RMSProps', 'Adam', 'AdamW'] = 'SGD'
     ):
     
     dist.init_process_group("nccl", rank = rank, world_size = world_size)
@@ -148,7 +157,18 @@ def train_per_proc(
     model.train()
     
     ddp_model = DDP(model, device_ids = [device], output_device=device)
-    optimizer = torch.optim.RMSprop(ddp_model.parameters(), lr = learning_rate)
+    
+    if optimizer_type == "SGD":
+        optimizer = torch.optim.SGD(ddp_model.parameters(), lr = learning_rate)
+    elif optimizer_type == "RMSProps":
+        optimizer = torch.optim.RMSprop(ddp_model.parameters(), lr = learning_rate)
+    elif optimizer_type == "Adam":
+        optimizer = torch.optim.Adam(ddp_model.parameters(), lr = learning_rate)
+    elif optimizer_type == "AdamW":
+        optimizer = torch.optim.AdamW(ddp_model.parameters(), lr = learning_rate)
+    else:
+        optimizer = torch.optim.AdamW(ddp_model.parameters(), lr = learning_rate)
+    
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size = 8, gamma=0.995)
     
     if not os.path.isfile(model_filepath) and dist.get_rank() == 0:
@@ -163,6 +183,11 @@ def train_per_proc(
         
     train_loader, valid_loader, train_sampler, valid_sampler = get_distributed_loader(train_dataset, valid_dataset, num_replicas=world_size, rank = rank, num_workers = 8, batch_size = batch_size)
 
+    if rank == 0:
+        test_loader = DataLoader(test_dataset, batch_size, num_workers = 8, pin_memory=True, drop_last = True, persistent_workers=True, collate_fn=test_dataset.collate_fn)
+    else:
+        test_loader = None
+    
     for epoch in tqdm(range(num_epoch), desc = "Distributed training process", disable = False if rank == 0 else True):
         
         train_sampler.set_epoch(epoch)
@@ -192,7 +217,11 @@ def train_per_proc(
                 
             if verbose:
                 if epoch % verbose == 0:
-                    print("epoch : {}, train loss : {:.3f}, valid loss : {:.3f}".format(epoch+1, train_loss, valid_loss))
+                    test_loss, APs, mAP = evaluate(test_loader, model, loss_fn, device, min_score, max_overlap, top_k)
+                    
+                    print("epoch : {}, train loss : {:.3f}, valid loss : {:.3f}, test loss : {:.3f}, Precision : {:.3f}, Total precision : {:.3f}".format(
+                        epoch+1, train_loss, valid_loss, test_loss, APs['molecule'], mAP
+                    ))
           
             # save the best parameters
             if best_loss > valid_loss:
@@ -221,6 +250,7 @@ def train(
     model : torch.nn.Module,
     train_dataset : Dataset,
     valid_dataset : Dataset,
+    test_dataset:Dataset,
     random_seed : int = 42,
     resume : bool = True,
     learning_rate : float = 1e-3,
@@ -231,13 +261,21 @@ def train(
     verbose : Optional[int] = 8,
     save_best : str = "./weights/distributed_best.pt",
     tensorboard_dir : Optional[str] = None,
+    min_score : float = 0.5,
+    max_overlap : float = 0.5,
+    top_k :int = 8,
+    optimizer_type:Literal['SGD', 'RMSProps', 'Adam', 'AdamW'] = 'SGD'
 ):
-
+    
     world_size = torch.cuda.device_count()
 
     mp.spawn(
         train_per_proc,
-        args = (world_size, batch_size, model, train_dataset,valid_dataset, loss_fn, max_norm_grad, model_filepath, random_seed, resume, learning_rate, num_epoch, verbose, save_best, tensorboard_dir),
+        args = (
+            world_size, batch_size, model, train_dataset, valid_dataset, test_dataset, loss_fn, max_norm_grad, 
+            model_filepath, random_seed, resume, learning_rate, num_epoch, verbose, save_best, tensorboard_dir, 
+            min_score, max_overlap, top_k, optimizer_type
+            ),
         nprocs = world_size,
         join = True
     )
