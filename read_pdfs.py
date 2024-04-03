@@ -5,8 +5,32 @@ import numpy as np
 import torch, os
 from src.models.SSD300.model import SSD300
 from src.detect import detect
+from src.utils import crop_mol_img
+from config.API_key import API_KEY
+from tqdm.auto import tqdm
 import argparse
 import json
+
+def transfer_bucket(file_path : str, s3_file_name:str):
+    aws_access_key = API_KEY.aws_access_key
+    aws_secret_key = API_KEY.aws_secret_key
+    aws_default_region = API_KEY.aws_default_region
+
+    bucket_name = API_KEY.bucket_name
+
+    s3 = boto3.client(
+        "s3", 
+        aws_access_key_id=aws_access_key, 
+        aws_secret_access_key=aws_secret_key
+    )
+
+    with open(file_path, "rb") as f:
+        content = f.read()
+        
+    content_byte = io.BytesIO(content)
+
+    # print(s3_file_name)
+    s3.upload_fileobj(content_byte, bucket_name, s3_file_name, ExtraArgs={'ACL': 'public-read'})
 
 # argument parser
 def parsing():
@@ -50,7 +74,7 @@ if __name__ == "__main__":
         device = 'cpu'
     
     device = 'cpu'
-    save_best_dir = "./weights/{}_best.pt".format(tag)
+    save_best_dir = "./weights/{}_ddp_best.pt".format(tag)
     
     model = SSD300(5)
     model.to(device)
@@ -85,8 +109,8 @@ if __name__ == "__main__":
         if not os.path.exists(save_path):
             os.mkdir(save_path)
         
-        for idx, img in enumerate(imgs): 
-            annot, is_success, locs, labels = detect(img, model, device, min_score = args['min_score'], max_overlap = args['max_overlap'], top_k = args['top_k'], return_results=True)
+        for idx, img in enumerate(tqdm(imgs, desc = "Detection process for file path: {}".format(path))): 
+            annot, is_success, locs, labels = detect(img, model, device, min_score = args['min_score'], max_overlap = args['max_overlap'], top_k = args['top_k'], return_results=True, soft_nms = False)
             
             if not is_success:
                 continue

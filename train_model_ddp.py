@@ -1,6 +1,5 @@
 import pandas as pd
 import torch, os
-from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 from src.models.SSD300.model import SSD300
 from src.models.FasterRCNN.FasterRCNN import FasterRCNNVGG16
@@ -28,7 +27,22 @@ def parsing():
     parser.add_argument("--num_workers", type = int, default = 4)
     parser.add_argument("--pin_memory", type = bool, default = True)
     parser.add_argument("--train_test_ratio", type = float, default = 0.2)
-
+    parser.add_argument("--continue_training", type = bool, default = False)
+    
+    # optimizer : SGD, RMSProps, Adam, AdamW
+    parser.add_argument("--optimizer", type = str, default = "AdamW", choices=["SGD", "RMSProps", "Adam", "AdamW"])
+    
+    # Loss function setup
+    parser.add_argument("--threshold", type = float, default = 0.5)
+    parser.add_argument("--neg_pos_ratio", type = float, default = 3.0)
+    parser.add_argument("--alpha", type = float, default = 1.0)
+    parser.add_argument("--use_focal_loss", type = bool, default = False)
+    
+    # detection setup
+    parser.add_argument("--min_score", type = float, default = 0.5)
+    parser.add_argument("--max_overlap", type = float, default = 0.5)
+    parser.add_argument("--top_k", type = int, default = 12)
+    
     # learning rate, step size and decay constant
     parser.add_argument("--lr", type = float, default = 2e-4)
     parser.add_argument("--max_norm_grad", type = float, default = 1.0)
@@ -94,8 +108,18 @@ if __name__ == "__main__":
     elif args['model'] == 'FasterRCNN':
         model = FasterRCNNVGG16(n_fg_class=5)
         
-    loss_fn = MultiBoxLoss(model.priors_cxcy)
+    loss_fn = MultiBoxLoss(
+        model.priors_cxcy, 
+        threshold = args['threshold'], 
+        neg_pos_ratio = args['neg_pos_ratio'], 
+        alpha = args['alpha'],
+        use_focal_loss = args['use_focal_loss']
+    )
     model.summary()
+    
+    if args['continue_training'] and os.path.exists(save_best_dir):
+        print("Load previous best parameters for continuing training process")
+        model.load_state_dict(torch.load(save_best_dir, map_location = "cpu"))
 
     print("=============== Training process ===============")
     train(
@@ -103,6 +127,7 @@ if __name__ == "__main__":
         model = model,
         train_dataset = train_dataset,
         valid_dataset = valid_dataset,
+        test_dataset = test_dataset,
         random_seed = args['random_seed'],
         resume = False,
         learning_rate  = args['lr'],
@@ -113,4 +138,8 @@ if __name__ == "__main__":
         verbose = args['verbose'],
         save_best = save_best_dir,
         tensorboard_dir = exp_dir,
+        min_score = args['min_score'],
+        max_overlap = args['max_overlap'],
+        top_k = args['top_k'],
+        optimizer_type = args['optimizer']
     )

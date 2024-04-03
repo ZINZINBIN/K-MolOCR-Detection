@@ -162,7 +162,11 @@ def getDrawingOptions():
 
 # convert smiles text to image
 def Smiles2Img(smiles, IMG_SIZE : int = 128):
-    mol = Chem.MolFromSmiles(smiles)
+    
+    params = Chem.SmilesParserParams()
+    params.removeHs = False
+    
+    mol = Chem.MolFromSmiles(smiles, params)
     rdCoordGen.AddCoords(mol)
     
     ########## flip #########
@@ -173,14 +177,15 @@ def Smiles2Img(smiles, IMG_SIZE : int = 128):
     ########## rotation ##########
     rotate_molecule = random.randint(0,3)
     if rotate_molecule:
-        mol = get_rotated_mol(mol)
+        mol = Chem.AddHs(mol)
+        mol = get_rotated_mol(mol) # addHs occur
     
     use_abbreviation = random.randint(0,3)
     if not use_abbreviation:
         mol = get_abbreviationed_mol(mol)
 
     options = getDrawingOptions()
-    img = Chem.Draw.MolToImage(mol, size=(IMG_SIZE+random.randint(0, 64), IMG_SIZE+random.randint(0, 64)), options=options)
+    img = Chem.Draw.MolToImage(mol, size=(IMG_SIZE+random.randint(-32, 64), IMG_SIZE+random.randint(-32, 64)), options=options)
     img = np.array(img)
     
     return img
@@ -215,92 +220,130 @@ def corner2center(x1,y1,x2,y2):
     H = abs(y1-y2)
     return [int(xc), int(yc), int(W), int(H)]
 
+def split_region(integrated_image:np.ndarray, n_object:int):
+    
+    H = integrated_image.shape[0]
+    W = integrated_image.shape[1]
+    
+    obj2reg = {
+        1 : 0,
+        2 : 1,
+        3 : 1,
+        4 : 2,
+        5 : 2,
+        6 : 3, 
+        7 : 3,
+        8 : 4,
+        9 : 4,
+        10 : 5,
+        11 : 5,
+        12 : 5,
+    }
+
+    if n_object <= 12:
+        region_type = obj2reg[n_object]
+    else:
+        region_type = 5
+    
+    # pbox = [x1, y1, x2, y2]
+    if region_type == 0:
+        pboxs = [[0,0,W,H]]
+    elif region_type == 1:
+        pboxs = [[0,0,int(W/2),H], [int(W/2),0,W,H]]
+    elif region_type == 2:
+        pboxs = [[0,0,int(W/2),int(H/2)],[0,int(H/2),int(W/2),H],[int(W/2),int(H/2),W,H],[int(W/2),0,W,int(H/2)]]
+    elif region_type == 3:
+        pboxs = [
+            [0,0,int(W/2),int(H/3)],
+            [0,int(H/3),int(W/2),int(2*H/3)],
+            [0,int(2*H/3),int(W/2),H],
+            [int(W/2),int(2*H/3),W,H],
+            [int(W/2),int(H/3),W,int(2*H/3)],
+            [int(W/2),0,W,int(H/3)],
+        ]
+        
+    elif region_type == 4:
+        pboxs = [
+            [0,0,int(W/2),int(H/4)],
+            [0,int(H/4),int(W/2),int(2*H/4)],
+            [0,int(2*H/4),int(W/2),int(3*H/4)],
+            [0,int(3*H/4),int(W/2),H],
+            [int(W/2),int(3*H/4),W,H],
+            [int(W/2),int(2*H/4),W,int(3*H/4)],
+            [int(W/2),int(H/4),W,int(2*H/4)],
+            [int(W/2),0,W,int(H/4)],
+        ]
+    
+    elif region_type == 5:
+        pboxs = [
+            [0,0,int(W/3),int(H/4)],
+            [0,int(H/4),int(W/3),int(2*H/4)],
+            [0,int(2*H/4),int(W/3),int(3*H/4)],
+            [0,int(3*H/4),int(W/3),H],
+            [int(W/3),0,int(2*W/3),int(H/4)],
+            [int(W/3),int(H/4),int(2*W/3),int(2*H/4)],
+            [int(W/3),int(2*H/4),int(2*W/3),int(3*H/4)],
+            [int(W/3),int(3*H/4),int(2*W/3),H],
+            [int(2*W/3),int(3*H/4),W,H],
+            [int(2*W/3),int(2*H/4),W,int(3*H/4)],
+            [int(2*W/3),int(H/4),W,int(2*H/4)],
+            [int(2*W/3),0,W,int(H/4)],
+        ]  
+
+    return pboxs
+
 # generate the canvas for training detection model
-def generate_integrated_image(images, fig_height : int = 512, fig_width : int = 512, max_iters : int = 128):
-    '''
-        Input
-            images : List, fig_height : height of canvas, fig_width : width of canvas, max_iters : maximum number for random sampling for locating the images
-        Output
-            intergrated_image : np.array, labels : List[[x1,y1,x2,y2],[...],...]
-    '''
-  
+# Molecular images only
+def generate_integrated_image(images, fig_height : int = 900, fig_width : int = 600, integrated_image:Optional[np.ndarray] = None):
+    
     # Create an empty canvas for the integrated image
-    integrated_image = np.ones((fig_height, fig_width, 3), dtype=np.uint8) * 255
-
-    # Create a mask to keep track of filled regions on the integrated image
-    filled_mask = np.zeros((fig_height, fig_width), dtype=np.uint8)
-    
-    # max height and width
-    max_height = max([img.shape[0] for img in images])
-    max_width = max([img.shape[1] for img in images])
-    
-    if max_height > fig_height or max_width > fig_width:
-        print("error : image size exceed the canvas size")
-        return None, None
-
-    x_max = fig_width - max_width
-    y_max = fig_height - max_height
-    
-    end_process = False
-    n_process = 0
-    max_process = max_iters
-    
-    n_objects = len(images)
-    
-    while not end_process:
+    if integrated_image is None:
+        integrated_image = np.ones((fig_height, fig_width, 3), dtype=np.uint8) * 255
         
-        x_list = np.random.randint(0, x_max, n_objects)
-        y_list = np.random.randint(0, y_max, n_objects)
-        
-        for x,y,img in zip(x_list, y_list, images):
-            h = img.shape[0]
-            w = img.shape[1]
-            filled_mask[y:y+h,x:x+w] += 1
-            
-        if np.max(filled_mask) < 2:
-            end_process = True
-        else:
-            filled_mask = np.zeros((fig_height, fig_width), dtype=np.uint8)
-            
-        # iteration+1
-        n_process += 1
+    n_mols = len(images)
+    region_boxes = split_region(integrated_image, n_mols)
+    region_boxes_ordered = np.random.permutation(region_boxes)
     
-        # condition
-        if n_process > max_process:
-            break
-        
-        # end
-        if end_process:
-            break
-    
-    if not end_process:
-        return None, None
-    
-    # if random batch is successful
+    images_list = []
     label = []
-    for image, x, y in zip(images, x_list, y_list):
+    
+    for idx, image in enumerate(images):
         
-        height = image.shape[0]
-        width = image.shape[1]
+        if idx >= len(region_boxes):
+            region_box = region_boxes[idx-len(region_boxes)]
+        else:
+            region_box = region_boxes[idx]
         
-        label.append([x,y,x+width,y+height])
+        xl,yl,xr,yr = region_box[0], region_box[1], region_box[2], region_box[3]
+        
+        W = xr - xl
+        H = yr - yl
+        
+        w = image.shape[1]
+        h = image.shape[0]
+        
+        if w >= W:
+            image = image[:,int(w/2)-int(W/2):int(w/2)+int(W/2)]
+            w = W
+        
+        if h >= H:
+            image = image[int(h/2) - int(H/2):int(h/2)+int(H/2),:]
+            h = H
+        
+        x = np.random.randint(xl, xr - w + 1)
+        y = np.random.randint(yl, yr - h + 1)
+        
+        label.append([x,y,x+w,y+h])
         
         # Resize the image to its height and width specified in COCO format
-        image = cv2.resize(image, (width, height))
-   
-        # draw the image into the canvas
-        integrated_image[y:y+height, x:x+width] = image
-    
-    return integrated_image, label
+        image = cv2.resize(image, (w, h))
 
+        integrated_image[y:y+h, x:x+w] = image
+        
+    return integrated_image, label
+        
 # generate the canvas for training detection model with image and text : virtual PDF file image
-def generate_PDF_image(images, background_images, fig_height : int = 512, fig_width : int = 512, max_iters : int = 128, pdf_background=None):
-    '''
-        Input
-            images : List, background_images : List, fig_height : height of canvas, fig_width : width of canvas, max_iters : maximum number for random sampling for locating the images
-        Output
-            intergrated_image : np.array, labels : List[[x1,y1,x2,y2],[...],...]
-    '''
+def generate_PDF_image(images, background_images, fig_height : int = 900, fig_width : int = 600, pdf_background=None):
     
     # Create an empty canvas for the integrated image
     if pdf_background is not None:
@@ -309,145 +352,17 @@ def generate_PDF_image(images, background_images, fig_height : int = 512, fig_wi
         integrated_image = np.ones((fig_height, fig_width, 3), dtype=np.uint8) * 255
     
     # Process 1 : add image and text data
-    # Create a mask to keep track of filled regions on the integrated image
-    filled_mask = np.zeros((fig_height, fig_width), dtype=np.uint8)
-    
-    # max height and width
-    max_height = max([img.shape[0] for img in background_images])
-    max_width = max([img.shape[1] for img in background_images])
-    
-    if max_height > fig_height or max_width > fig_width:
-        print("error : background image size exceed the canvas size")
-        return None, None
-
-    end_process = False
-    n_process = 0
-    max_process = max_iters
-    
-    x_list = []
-    y_list = []
-    
-    # sort the position of the image and text
-    while not end_process:
-        
-        for img in background_images:
-            h = img.shape[0]
-            w = img.shape[1]
-            
-            x_max = fig_width - w
-            y_max = fig_height - h
-            x = np.random.randint(0, x_max)
-            y = np.random.randint(0, y_max)
-            
-            x_list.append(x)
-            y_list.append(y)
-            
-            filled_mask[y:y+h,x:x+w] += 1
-            
-        if np.max(filled_mask) < 2:
-            end_process = True
-        else:
-            filled_mask = np.zeros((fig_height, fig_width), dtype=np.uint8)
-            x_list.clear()
-            y_list.clear()
-            
-        # iteration+1
-        n_process += 1
-    
-        # condition
-        if n_process > max_process:
-            break
-        
-        # end
-        if end_process:
-            break
-    
-    if not end_process:
-        return None, None
-    
-    # if random batch is successful
-    label = []
-    for image, x, y in zip(background_images, x_list, y_list):
-        
-        height = image.shape[0]
-        width = image.shape[1]
-        
-        label.append([x,y,x+width,y+height])
-        
-        # Resize the image to its height and width specified in COCO format
-        image = cv2.resize(image, (width, height))
-   
-        # draw the image into the canvas
-        integrated_image[y:y+height, x:x+width] = image
-    
+    integrated_image, background_img_label = generate_integrated_image(background_images, fig_height, fig_width, integrated_image)
+     
     # Process 2 : add molecular image to the canvas
-    # In this case, molecular image can cover the canvas whether the background image exist or does not on it.
-    max_height = max([img.shape[0] for img in images])
-    max_width = max([img.shape[1] for img in images])
+    # In this case, molecular image can overlap the canvas whether the background image exist or does not on it.
+    integrated_image, molecule_label = generate_integrated_image(images, fig_height, fig_width, integrated_image)
     
-    if max_height > fig_height or max_width > fig_width:
-        print("error : image size exceed the canvas size")
-        return None, None
-
-    filled_mask = np.zeros((fig_height, fig_width), dtype=np.uint8)
-    
-    end_process = False
-    n_process = 0
-    x_list = []
-    y_list = []
-    
-    while not end_process:
+    label = []
+    label.extend(background_img_label)
+    label.extend(molecule_label)
         
-        for img in images:
-            h = img.shape[0]
-            w = img.shape[1]
-            
-            x_max = fig_width - w
-            y_max = fig_height - h
-            
-            x = np.random.randint(0, x_max)
-            y = np.random.randint(0, y_max)
-            
-            filled_mask[y:y+h,x:x+w] += 1
-            x_list.append(x)
-            y_list.append(y)
-            
-        if np.max(filled_mask) < 2:
-            end_process = True
-        else:
-            filled_mask = np.zeros((fig_height, fig_width), dtype=np.uint8)
-            x_list.clear()
-            y_list.clear()
-            
-        # iteration+1
-        n_process += 1
-    
-        # condition
-        if n_process > max_process:
-            break
-        
-        # end
-        if end_process:
-            break
-    
-    if not end_process:
-        return None, None
-    
-    for image, x, y in zip(images, x_list, y_list):
-        
-        height = image.shape[0]
-        width = image.shape[1]
-        
-        label.append([x,y,x+width,y+height])
-        
-        # Resize the image to its height and width specified in COCO format
-        image = cv2.resize(image, (width, height))
-   
-        # draw the image into the canvas
-        integrated_image[y:y+height, x:x+width] = image
-    
     return integrated_image, label
-
 
 def prepare_background_imgs(text_folder : str, img_folder : str, fig_height : int, fig_width : int, n_min : int = 2, n_max : int = 4):
     background_imgs = []
@@ -461,8 +376,8 @@ def prepare_background_imgs(text_folder : str, img_folder : str, fig_height : in
     path_list = [path_list[idx] for idx in indices]
     background_classes = [background_classes[idx] for idx in indices]
     
-    max_h = int(fig_height * 0.4)
-    max_w = int(fig_width * 0.75)
+    max_h = int(fig_height * 0.5)
+    max_w = int(fig_width * 0.5)
     
     for path in path_list:
         img = Image.open(path, mode = 'r')
@@ -490,7 +405,18 @@ def prepare_background_imgs(text_folder : str, img_folder : str, fig_height : in
     
     return background_imgs, background_classes
 
-def process(smiles_list : List, table_list : List, num_data : int = 200000, max_smiles : int = 6, max_table : int = 2, img_size : int = 128, fig_height : int = 512, fig_width : int = 512, max_iters : int = 128, save_dir : str = "./dataset/detection", add_background : bool = False, use_pdf_background:bool = False, background_pdf_list:Optional[List] = None):
+def process(
+    smiles_list : List, 
+    table_list : List, 
+    num_data : int = 200000, 
+    max_smiles : int = 12, 
+    max_table : int = 2, 
+    img_size : int = 128, 
+    fig_height : int = 900, 
+    fig_width : int = 600, 
+    save_dir : str = "./dataset/detection", 
+    background_pdf_list:Optional[List] = None
+    ):
     
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
@@ -506,41 +432,103 @@ def process(smiles_list : List, table_list : List, num_data : int = 200000, max_
     indx = 0
     pdf_indx = 0
     
-    for num_img in tqdm(range(num_data), 'data generation proceeding...'):
+    # Generation process
+    # (1) Molecular images only with zero background
+    # (2) Molecular images and other objects with zero background
+    # (3) Molecular images and other objects with PDF background
+    
+    for num_img in tqdm(range(num_data//3), 'Data generation process (1)', disable=disable_tqdm):
+        
+        n_smiles = random.randint(1, max_smiles+1)
+        random.shuffle(smiles_list)
+        sampled_smiles_list = smiles_list[0:n_smiles]
+        smiles_images = [Smiles2Img(smiles, img_size) for smiles in sampled_smiles_list]
+        
+        integrated_image, label = generate_integrated_image(smiles_images, fig_height, fig_width)
+        classes = [3 for _ in range(len(smiles_images))]
+
+        if integrated_image is not None:
+            indx += 1
+            
+            img_dir = os.path.join(save_dir, "img_{}.jpg".format(str(indx).zfill(5)))
+            cv2.imwrite(img_dir, integrated_image)
+            
+            col_ids.append(num_img)
+            col_smiles.append(sampled_smiles_list)
+            col_table.append([])
+            col_img.append(img_dir)
+            col_n_molecules.append(n_smiles)
+            col_label.append(label)
+            col_classes.append(classes)
+    
+    for num_img in tqdm(range(num_data//3, 2 * num_data//3), 'Data generation process (2)', disable=disable_tqdm):
+        
         n_table = random.randint(1, max_table+1)
         n_smiles = random.randint(1, max_smiles+1)
 
         random.shuffle(table_list)
         sampled_table_list = table_list[0:n_table]
-
+        
+        n_smiles = random.randint(1, max_smiles+1)
         random.shuffle(smiles_list)
         sampled_smiles_list = smiles_list[0:n_smiles]
-
         smiles_images = [Smiles2Img(smiles, img_size) for smiles in sampled_smiles_list]
         
-        max_h = fig_height*0.3
-        max_w = fig_width*0.5
+        max_h = fig_height*0.35
+        max_w = fig_width*0.35
         min_h = fig_height*0.1
-        min_w = fig_width*0.2
+        min_w = fig_width*0.1
 
         table_images = [Table2Img(path, max_h, max_w, min_h, min_w) for path in sampled_table_list]
         
-        if add_background:
-            background_images, background_classes = prepare_background_imgs("./dataset/sample_text", "./dataset/sample_img", fig_height, fig_width, 2, 4)
+        background_images, background_classes = prepare_background_imgs("./dataset/sample_text", "./dataset/sample_img", fig_height, fig_width, 2, 4)
             
-            if use_pdf_background and indx // 2 == 0:
-                pdf_background = background_pdf_list[pdf_indx]                
-                integrated_image, label = generate_PDF_image(table_images + smiles_images, background_images, fig_height, fig_width, max_iters, pdf_background)
-            else:
-                integrated_image, label = generate_PDF_image(table_images + smiles_images, background_images, fig_height, fig_width, max_iters, None)
-                
-            classes = background_classes + [4 for _ in range(len(table_images))] + [3 for _ in range(len(smiles_images))]
-        else:
-            integrated_image, label = generate_integrated_image(table_images + smiles_images, fig_height, fig_width, max_iters)
-            classes = [4 for _ in range(len(table_images))] + [3 for _ in range(len(smiles_images))]
-
+        integrated_image, label = generate_PDF_image(table_images + smiles_images, background_images, fig_height, fig_width, None)
+        classes = background_classes + [4 for _ in range(len(table_images))] + [3 for _ in range(len(smiles_images))]
+     
         if integrated_image is not None:
             indx += 1
+            
+            img_dir = os.path.join(save_dir, "img_{}.jpg".format(str(indx).zfill(5)))
+            cv2.imwrite(img_dir, integrated_image)
+            
+            col_ids.append(num_img)
+            col_smiles.append(sampled_smiles_list)
+            col_table.append(sampled_table_list)
+            col_img.append(img_dir)
+            col_n_molecules.append(n_smiles)
+            col_label.append(label)
+            col_classes.append(classes)
+            
+    for num_img in tqdm(range(2*num_data//3, num_data), 'Data generation process (3)', disable=disable_tqdm):
+        
+        n_table = random.randint(1, max_table+1)
+        n_smiles = random.randint(1, max_smiles+1)
+
+        random.shuffle(table_list)
+        sampled_table_list = table_list[0:n_table]
+        
+        n_smiles = random.randint(1, max_smiles+1)
+        random.shuffle(smiles_list)
+        sampled_smiles_list = smiles_list[0:n_smiles]
+        smiles_images = [Smiles2Img(smiles, img_size) for smiles in sampled_smiles_list]
+        
+        max_h = fig_height*0.35
+        max_w = fig_width*0.35
+        min_h = fig_height*0.1
+        min_w = fig_width*0.1
+
+        table_images = [Table2Img(path, max_h, max_w, min_h, min_w) for path in sampled_table_list]
+        
+        background_images, background_classes = prepare_background_imgs("./dataset/sample_text", "./dataset/sample_img", fig_height, fig_width, 2, 4)
+            
+        pdf_background = background_pdf_list[pdf_indx]                
+        integrated_image, label = generate_PDF_image(table_images + smiles_images, background_images, fig_height, fig_width, pdf_background)
+        classes = background_classes + [4 for _ in range(len(table_images))] + [3 for _ in range(len(smiles_images))]
+     
+        if integrated_image is not None:
+            indx += 1
+            
             pdf_indx += 1
             
             if pdf_indx >= len(background_pdf_list) - 1:
@@ -556,7 +544,7 @@ def process(smiles_list : List, table_list : List, num_data : int = 200000, max_
             col_n_molecules.append(n_smiles)
             col_label.append(label)
             col_classes.append(classes)
-
+            
     df = pd.DataFrame({
         "id":col_ids,
         "SMILES":col_smiles,
@@ -572,7 +560,9 @@ def process(smiles_list : List, table_list : List, num_data : int = 200000, max_
 # generate detection dataset
 if __name__=="__main__":
     
-    df = pd.read_csv('./dataset/surechembl_cleansed.csv').sample(n=80000)
+    disable_tqdm = True
+    
+    df = pd.read_csv('./dataset/surechembl_cleansed.csv').sample(n=100000)
     smiles_list = df['SMILES'].to_list()
 
     table_list = random.sample(glob2.glob('./dataset/cropped_table_images/*'), 256)
@@ -584,7 +574,7 @@ if __name__=="__main__":
     dir_list_pdf = random.sample(dir_list_pdf, 128)
     background_pdf_list = []
 
-    for filepath in tqdm(dir_list_pdf, "PDF image extraction"):
+    for filepath in tqdm(dir_list_pdf, "PDF image extraction", disable=disable_tqdm):
         
         doc = fitz.open(filepath)
         imgs = []
@@ -598,5 +588,7 @@ if __name__=="__main__":
         
         background_pdf_list.extend(imgs)
     
-    df_detection = process(smiles_list, table_list, num_data=200000, max_smiles=8, max_table=2, img_size=112, fig_height = 900, fig_width=600, max_iters=64, save_dir = "./dataset/detection", add_background=True, use_pdf_background = True, background_pdf_list = background_pdf_list)
+    df_detection = process(smiles_list, table_list, num_data=12000, max_smiles=12, max_table=1, img_size=112, fig_height = 900, fig_width=600, save_dir = "./dataset/detection", background_pdf_list = background_pdf_list)
     df_detection.to_csv("./dataset/detection_data.csv")
+    
+    print("Data generation process clear")

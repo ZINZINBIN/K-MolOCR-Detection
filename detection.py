@@ -1,7 +1,9 @@
 import torch
 from src.models.SSD300.model import SSD300
 from src.detect import detect
-import argparse
+from src.utils import calculate_mAP, transform
+import argparse, ast
+import pandas as pd
 from PIL import Image
 
 # argument parser
@@ -14,23 +16,12 @@ def parsing():
 
     # gpu allocation
     parser.add_argument("--gpu_num", type = int, default = 3)
-
-    # batch size / sequence length / epochs / distance / num workers / pin memory use
-    parser.add_argument("--num_epoch", type = int, default = 16)
-    parser.add_argument("--verbose", type = int, default = 4)
-    parser.add_argument("--num_workers", type = int, default = 4)
-    parser.add_argument("--pin_memory", type = bool, default = True)
-    parser.add_argument("--train_test_ratio", type = float, default = 0.2)
-
-    # optimizer : SGD, RMSProps, Adam, AdamW
-    parser.add_argument("--optimizer", type = str, default = "AdamW", choices=["SGD", "RMSProps", "Adam", "AdamW"])
     
-    # learning rate, step size and decay constant
-    parser.add_argument("--lr", type = float, default = 2e-4)
-    parser.add_argument("--use_scheduler", type = bool, default = True)
-    parser.add_argument("--step_size", type = int, default = 4)
-    parser.add_argument("--gamma", type = float, default = 0.95)
-    parser.add_argument("--max_norm_grad", type = float, default = 1.0)
+    # detection setup
+    parser.add_argument("--min_score", type = float, default = 0.5)
+    parser.add_argument("--max_overlap", type = float, default = 0.5)
+    parser.add_argument("--top_k", type = int, default = 8)
+    parser.add_argument("--image_index", type = int, default = 1000)
 
     args = vars(parser.parse_args())
     return args
@@ -66,9 +57,31 @@ if __name__ == "__main__":
     
     model.load_state_dict(torch.load(save_best_dir, map_location = device))
     
-    img_path = './dataset/detection/img_00001.jpg'
+    # Select image from dataset
+    df = pd.read_csv("./dataset/detection_data.csv")
+    
+    indx = args['image_index']
+    img_path = df['img'].values[indx]
+
+    true_boxes = torch.as_tensor(ast.literal_eval(df['label'].values[indx]), dtype = torch.float32)
+    true_labels = torch.as_tensor(ast.literal_eval(df['class'].values[indx]), dtype = torch.int32)
+    
     original_image = Image.open(img_path, mode='r')
     original_image = original_image.convert('RGB')
     
-    annot = detect(original_image, model, device, min_score = 0.2, max_overlap = 0.5, top_k = 5)
-    annot.save("./results/detection_with_background.jpg")
+    # Detection process
+    result = detect(original_image, model, device, min_score = args['min_score'], max_overlap = args['max_overlap'], top_k = args['top_k'])
+    result[0].save("./results/detection_with_background.jpg")
+    
+    # Evaluation process    
+    true_image, true_boxes, true_labels = transform(original_image, true_boxes, true_labels, 'TEST')
+    
+    predicted_locs, predicted_scores = model(true_image.unsqueeze(0).to(device))
+    det_boxes, det_labels, det_scores = model.predict(predicted_locs, predicted_scores, args['min_score'], args['max_overlap'], args['top_k'])
+    
+    AP, mAP = calculate_mAP(det_boxes, det_labels, det_scores, [true_boxes], [true_labels], 0.5, device)
+    
+    for k,v in AP.items():
+        print("{}:{}".format(k,v))
+    
+    print("mean average precision: {}".format(mAP))

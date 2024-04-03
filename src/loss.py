@@ -1,11 +1,34 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
-from typing import Union
+from typing import Union, Optional
+from torch.autograd import Variable
 from src.utils import find_jaccard_overlap, cxcy_to_gcxgcy, xy_to_cxcy
 
+class FocalLoss(nn.Module):
+    def __init__(self, weight : Optional[torch.Tensor] = None, gamma : float = 2.0):
+        super(FocalLoss, self).__init__()
+        assert gamma >= 0, "gamma should be positive"
+        self.gamma = gamma
+        self.weight = weight
+    
+    def update_weight(self, weight : Optional[torch.Tensor] = None):
+        self.weight = weight
+
+    def compute_focal_loss(self, inputs:torch.Tensor, gamma:float, alpha : torch.Tensor):
+        p = torch.exp(-inputs)
+        loss = alpha * (1-p) ** gamma * inputs
+        return loss
+
+    def forward(self, input : torch.Tensor, target : torch.Tensor):
+        weight = self.weight.to(input.device)
+        alpha = weight.gather(0, target.data.view(-1))
+        alpha = Variable(alpha)
+        return self.compute_focal_loss(F.cross_entropy(input, target, reduce = False, weight = None), self.gamma, alpha)
+
 class MultiBoxLoss(nn.Module):
-    def __init__(self, priors_cxcy, threshold : float = 0.5, neg_pos_ratio : float = 3.0, alpha : float = 1.0):
+    def __init__(self, priors_cxcy, threshold : float = 0.5, neg_pos_ratio : float = 3.0, alpha : float = 1.0, use_focal_loss : bool = False):
         super().__init__()
         self.priors_cxcy = priors_cxcy
         self.priors_xy = self.cxcy_to_xy(priors_cxcy)
@@ -15,7 +38,7 @@ class MultiBoxLoss(nn.Module):
         self.alpha = alpha
         
         self.smooth_l1 = nn.L1Loss()
-        self.cross_entropy = nn.CrossEntropyLoss(reduce = False)
+        self.cross_entropy = nn.CrossEntropyLoss(reduce = False) if not use_focal_loss else FocalLoss(torch.Tensor([0.2,0.2,0.2,0.2,0.2]), 2.0)
         
     def cxcy_to_xy(self, cxcy:Union[torch.Tensor, np.ndarray]):
         return torch.cat([cxcy[:, :2] - (cxcy[:, 2:] / 2), cxcy[:, :2] + (cxcy[:, 2:] / 2)], 1) 
@@ -57,6 +80,7 @@ class MultiBoxLoss(nn.Module):
 
             # Labels for each prior
             label_for_each_prior = labels[i].to(device)[object_for_each_prior]  # (8732)
+            
             # Set priors whose overlaps with objects are less than the threshold to be background (no object)
             label_for_each_prior[overlap_for_each_prior < self.threshold] = 0  # (8732)
 
@@ -98,10 +122,3 @@ class MultiBoxLoss(nn.Module):
         conf_loss = (conf_loss_hard_neg.sum() + conf_loss_pos.sum()) / n_positives.sum().float()  # (), scalar
 
         return conf_loss + self.alpha * loc_loss
-    
-class FasterRCNNLoss(nn.Module):
-    def __init__(self):
-        super().__init__()
-    
-    def forward(self, predicted_locs:torch.Tensor, predicted_scores:torch.Tensor, boxes:torch.Tensor, labels:torch.Tensor):
-        return None
