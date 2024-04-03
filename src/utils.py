@@ -522,7 +522,7 @@ def transform(image, boxes, labels, split):
         # Convert PIL image to Torch tensor
         new_image = FT.to_tensor(new_image)
 
-        # Expand image (zoom out) with a 50% chance - helpful for training detection of small objects
+        # Expand image (zoom out) with a 75% chance - helpful for training detection of small objects
         # Fill surrounding space with the mean of ImageNet data that our base VGG was trained on
         if random.random() < 0.75:
             new_image, new_boxes = expand(new_image, boxes, filler=mean)
@@ -533,7 +533,7 @@ def transform(image, boxes, labels, split):
         # Convert Torch tensor to PIL image
         new_image = FT.to_pil_image(new_image)
 
-        # Flip image with a 50% chance
+        # Flip image with a 75% chance
         if random.random() < 0.75:
             new_image, new_boxes = flip(new_image, new_boxes)
             

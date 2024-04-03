@@ -15,7 +15,7 @@ def transform(image, resize : Tuple = (300, 300), mean : List = [0.485, 0.456, 0
     new_image = FT.normalize(new_image, mean, std) 
     return new_image
 
-def detect(original_image, model:nn.Module, device:str, min_score, max_overlap, top_k, suppress=None, return_results : bool = False):
+def detect(original_image, model:nn.Module, device:str, min_score, max_overlap, top_k, suppress=None, return_results : bool = False, soft_nms : bool = False):
     image = transform(original_image)
     model.eval()
     
@@ -26,7 +26,7 @@ def detect(original_image, model:nn.Module, device:str, min_score, max_overlap, 
     
     elif type(model) == SSD300:    
         predicted_locs, predicted_scores = model(image.unsqueeze(0).to(device))
-        det_boxes, det_labels, det_scores = model.predict(predicted_locs, predicted_scores, min_score, max_overlap, top_k)
+        det_boxes, det_labels, det_scores = model.predict(predicted_locs, predicted_scores, min_score, max_overlap, top_k, soft_nms = soft_nms)
             
     det_boxes = det_boxes[0].cpu()
     original_dims = torch.FloatTensor([original_image.width, original_image.height, original_image.width, original_image.height]).unsqueeze(0)

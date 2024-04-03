@@ -455,7 +455,8 @@ class SSD300(nn.Module):
 
         return prior_boxes
     
-    def predict(self, predicted_locs:torch.Tensor, predicted_scores:torch.Tensor, min_score:torch.Tensor, max_overlap, top_k):
+    def predict(self, predicted_locs:torch.Tensor, predicted_scores:torch.Tensor, min_score:torch.Tensor, max_overlap:float, top_k:float, soft_nms:bool = False, sigma : float = 0.5):
+        
         """
         Decipher the 8732 locations and class scores (output of ths SSD300) to detect objects.
         For each class, perform Non-Maximum Suppression (NMS) on boxes that are above a minimum threshold.
@@ -466,6 +467,7 @@ class SSD300(nn.Module):
         :param top_k: if there are a lot of resulting detection across all classes, keep only the top 'k'
         :return: detections (boxes, labels, and scores), lists of length batch_size
         """
+        
         device = predicted_locs.device
         batch_size = predicted_locs.size(0)
         n_priors = self.priors_cxcy.size(0)
@@ -491,12 +493,29 @@ class SSD300(nn.Module):
 
             # Check for each class
             for c in range(1, self.n_classes):
+                
                 # Keep only predicted boxes and scores where scores for this class are above the minimum score
                 class_scores = predicted_scores[i][:, c]  # (8732)
+                
+                # soft-nms (24.04.01s, not working...)
+                if soft_nms:
+                    class_scores, sort_ind = class_scores.sort(dim=0, descending=True) 
+                    decoded_locs = decoded_locs[sort_ind]  
+                    overlap = find_jaccard_overlap(decoded_locs, decoded_locs)
+                    
+                    max_class_scores = class_scores[0]
+                    
+                    for box in range(decoded_locs.size(0)):
+                        class_scores = torch.where(overlap[box] > max_overlap, class_scores * torch.exp(-overlap[box] ** 2 / sigma), class_scores)
+                        
+                    class_scores[0] = max_class_scores    
+                        
                 score_above_min_score = class_scores > min_score  # torch.uint8 (byte) tensor, for indexing
                 n_above_min_score = score_above_min_score.sum().item()
+                
                 if n_above_min_score == 0:
                     continue
+                
                 class_scores = class_scores[score_above_min_score]  # (n_qualified), n_min_score <= 8732
                 class_decoded_locs = decoded_locs[score_above_min_score]  # (n_qualified, 4)
 
@@ -506,7 +525,7 @@ class SSD300(nn.Module):
 
                 # Find the overlap between predicted boxes
                 overlap = find_jaccard_overlap(class_decoded_locs, class_decoded_locs)  # (n_qualified, n_min_score)
-
+                
                 # Non-Maximum Suppression (NMS)
                 # A torch.uint8 (byte) tensor to keep track of which predicted boxes to suppress
                 # 1 implies suppress, 0 implies don't suppress
@@ -514,6 +533,7 @@ class SSD300(nn.Module):
 
                 # Consider each box in order of decreasing scores
                 for box in range(class_decoded_locs.size(0)):
+                    
                     # If this box is already marked for suppression
                     if suppress[box] == 1:
                         continue
@@ -522,7 +542,7 @@ class SSD300(nn.Module):
                     # Find such boxes and update suppress indices
                     suppress = torch.max(suppress, overlap[box] > max_overlap)
                     # The max operation retains previously suppressed boxes, like an 'OR' operation
-
+                
                     # Don't suppress this box, even though it has an overlap of 1 with itself
                     suppress[box] = 0
 

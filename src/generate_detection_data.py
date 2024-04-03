@@ -376,8 +376,8 @@ def prepare_background_imgs(text_folder : str, img_folder : str, fig_height : in
     path_list = [path_list[idx] for idx in indices]
     background_classes = [background_classes[idx] for idx in indices]
     
-    max_h = int(fig_height * 0.4)
-    max_w = int(fig_width * 0.75)
+    max_h = int(fig_height * 0.5)
+    max_w = int(fig_width * 0.5)
     
     for path in path_list:
         img = Image.open(path, mode = 'r')
@@ -437,7 +437,7 @@ def process(
     # (2) Molecular images and other objects with zero background
     # (3) Molecular images and other objects with PDF background
     
-    for num_img in tqdm(range(num_data//3), 'Data generation process (1)'):
+    for num_img in tqdm(range(num_data//3), 'Data generation process (1)', disable=disable_tqdm):
         
         n_smiles = random.randint(1, max_smiles+1)
         random.shuffle(smiles_list)
@@ -461,7 +461,7 @@ def process(
             col_label.append(label)
             col_classes.append(classes)
     
-    for num_img in tqdm(range(num_data//3, 2 * num_data//3), 'Data generation process (2)'):
+    for num_img in tqdm(range(num_data//3, 2 * num_data//3), 'Data generation process (2)', disable=disable_tqdm):
         
         n_table = random.randint(1, max_table+1)
         n_smiles = random.randint(1, max_smiles+1)
@@ -474,10 +474,10 @@ def process(
         sampled_smiles_list = smiles_list[0:n_smiles]
         smiles_images = [Smiles2Img(smiles, img_size) for smiles in sampled_smiles_list]
         
-        max_h = fig_height*0.3
-        max_w = fig_width*0.5
+        max_h = fig_height*0.35
+        max_w = fig_width*0.35
         min_h = fig_height*0.1
-        min_w = fig_width*0.2
+        min_w = fig_width*0.1
 
         table_images = [Table2Img(path, max_h, max_w, min_h, min_w) for path in sampled_table_list]
         
@@ -500,7 +500,7 @@ def process(
             col_label.append(label)
             col_classes.append(classes)
             
-    for num_img in tqdm(range(2*num_data//3, num_data), 'Data generation process (3)'):
+    for num_img in tqdm(range(2*num_data//3, num_data), 'Data generation process (3)', disable=disable_tqdm):
         
         n_table = random.randint(1, max_table+1)
         n_smiles = random.randint(1, max_smiles+1)
@@ -513,10 +513,10 @@ def process(
         sampled_smiles_list = smiles_list[0:n_smiles]
         smiles_images = [Smiles2Img(smiles, img_size) for smiles in sampled_smiles_list]
         
-        max_h = fig_height*0.3
-        max_w = fig_width*0.5
+        max_h = fig_height*0.35
+        max_w = fig_width*0.35
         min_h = fig_height*0.1
-        min_w = fig_width*0.2
+        min_w = fig_width*0.1
 
         table_images = [Table2Img(path, max_h, max_w, min_h, min_w) for path in sampled_table_list]
         
@@ -560,6 +560,8 @@ def process(
 # generate detection dataset
 if __name__=="__main__":
     
+    disable_tqdm = True
+    
     df = pd.read_csv('./dataset/surechembl_cleansed.csv').sample(n=100000)
     smiles_list = df['SMILES'].to_list()
 
@@ -569,10 +571,10 @@ if __name__=="__main__":
     dir_list_pdf = glob2.glob("./dataset/sample_background/patents_after_20230601/*")
     print("PDF background list: ", len(dir_list_pdf))
 
-    dir_list_pdf = random.sample(dir_list_pdf, 4)
+    dir_list_pdf = random.sample(dir_list_pdf, 128)
     background_pdf_list = []
 
-    for filepath in tqdm(dir_list_pdf, "PDF image extraction"):
+    for filepath in tqdm(dir_list_pdf, "PDF image extraction", disable=disable_tqdm):
         
         doc = fitz.open(filepath)
         imgs = []
@@ -586,5 +588,7 @@ if __name__=="__main__":
         
         background_pdf_list.extend(imgs)
     
-    df_detection = process(smiles_list, table_list, num_data=3000, max_smiles=12, max_table=1, img_size=112, fig_height = 900, fig_width=600, save_dir = "./dataset/detection", background_pdf_list = background_pdf_list)
+    df_detection = process(smiles_list, table_list, num_data=12000, max_smiles=12, max_table=1, img_size=112, fig_height = 900, fig_width=600, save_dir = "./dataset/detection", background_pdf_list = background_pdf_list)
     df_detection.to_csv("./dataset/detection_data.csv")
+    
+    print("Data generation process clear")

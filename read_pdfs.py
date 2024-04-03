@@ -110,7 +110,7 @@ if __name__ == "__main__":
             os.mkdir(save_path)
         
         for idx, img in enumerate(tqdm(imgs, desc = "Detection process for file path: {}".format(path))): 
-            annot, is_success, locs, labels = detect(img, model, device, min_score = args['min_score'], max_overlap = args['max_overlap'], top_k = args['top_k'], return_results=True)
+            annot, is_success, locs, labels = detect(img, model, device, min_score = args['min_score'], max_overlap = args['max_overlap'], top_k = args['top_k'], return_results=True, soft_nms = False)
             
             if not is_success:
                 continue
