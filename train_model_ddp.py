@@ -22,7 +22,7 @@ def parsing():
 
     # batch size / sequence length / epochs / distance / num workers / pin memory use
     parser.add_argument("--batch_size", type = int, default = 32)
-    parser.add_argument("--num_epoch", type = int, default = 128)
+    parser.add_argument("--num_epoch", type = int, default = 256)
     parser.add_argument("--verbose", type = int, default = 4)
     parser.add_argument("--num_workers", type = int, default = 4)
     parser.add_argument("--pin_memory", type = bool, default = True)

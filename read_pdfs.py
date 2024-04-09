@@ -8,7 +8,7 @@ from src.detect import detect
 from src.utils import crop_mol_img
 from config.API_key import API_KEY
 from tqdm.auto import tqdm
-import argparse, json, boto3, io, cv2
+import argparse, json, boto3, io, cv2, copy
 
 def transfer_bucket(file_path :str, s3_file_name:str):
     aws_access_key = API_KEY.aws_access_key
@@ -111,7 +111,8 @@ if __name__ == "__main__":
             os.mkdir(save_path)
         
         for idx, img in enumerate(tqdm(imgs, desc = "Detection process for file path: {}".format(path))): 
-            origin_img = img
+            origin_img = copy.deepcopy(img)
+            
             annot, is_success, locs, labels = detect(img, model, device, min_score = args['min_score'], max_overlap = args['max_overlap'], top_k = args['top_k'], return_results=True, soft_nms = False)
             
             if not is_success:
