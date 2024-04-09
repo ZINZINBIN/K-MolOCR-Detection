@@ -8,10 +8,9 @@ from src.detect import detect
 from src.utils import crop_mol_img
 from config.API_key import API_KEY
 from tqdm.auto import tqdm
-import argparse
-import json
+import argparse, json, boto3, io, cv2
 
-def transfer_bucket(file_path : str, s3_file_name:str):
+def transfer_bucket(file_path :str, s3_file_name:str):
     aws_access_key = API_KEY.aws_access_key
     aws_secret_key = API_KEY.aws_secret_key
     aws_default_region = API_KEY.aws_default_region
@@ -89,14 +88,16 @@ if __name__ == "__main__":
     
     if not os.path.exists("./results/sample_test/"):
         os.mkdir("./results/sample_test/")
-
+        
+    if not os.path.exists("./results/sample_test/molecules/"):
+        os.mkdir("./results/sample_test/molecules/")
+    
     page_ids = 0
     sample_ids = 0
 
     image_ids = []
     classes = []
     positions = []
-    
     num_pages = 0
     
     print("# Molecular detection proceeding..")
@@ -110,17 +111,19 @@ if __name__ == "__main__":
             os.mkdir(save_path)
         
         for idx, img in enumerate(tqdm(imgs, desc = "Detection process for file path: {}".format(path))): 
+            origin_img = img
             annot, is_success, locs, labels = detect(img, model, device, min_score = args['min_score'], max_overlap = args['max_overlap'], top_k = args['top_k'], return_results=True, soft_nms = False)
             
             if not is_success:
                 continue
             
             img_path = "./results/sample_test/file{:03d}/page{:03d}.jpg".format(file_idx + 1, idx + 1)
+    
             annot.save(img_path)
             
             locs = np.array(locs)
             labels = np.array(labels)
-            target_indx = np.where((labels == "molecule") | (labels == "table"))
+            target_indx = np.where((labels == "molecule"))
             
             locs = locs[target_indx].tolist()
             labels = labels[target_indx].tolist()
@@ -128,6 +131,23 @@ if __name__ == "__main__":
             image_ids.extend([idx + 1 + num_pages for _ in range(len(locs))])
             positions.extend(locs)
             classes.extend(labels)
+            
+            # Crop image and transfer the image to AWS server
+            for idx_mol, loc in enumerate(locs):
+                xl,yl,w,h = loc
+                
+                img_mol = np.array(origin_img)[int(yl):int(yl+h), int(xl):int(xl+w)]
+                
+                tag = "file_{:03d}_page_{:03d}_mol_{:03d}".format(file_idx+1,idx+1,idx_mol+1)
+                local_save_path = "./results/sample_test/molecules/{}.png".format(tag)
+                
+                # save to local directory
+                cv2.imwrite(local_save_path, img_mol)
+                
+                # save to AWS server
+                s3_save_path = "https://kmolocr.s3.ap-northeast-2.amazonaws.com/{}".format(tag)
+                
+                transfer_bucket(local_save_path, s3_save_path)
         
         num_pages += len(imgs)
 
