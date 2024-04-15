@@ -44,7 +44,7 @@ def parsing():
     parser.add_argument("--top_k", type = int, default = 12)
     
     # learning rate, step size and decay constant
-    parser.add_argument("--lr", type = float, default = 2e-4)
+    parser.add_argument("--lr", type = float, default = 1e-3)
     parser.add_argument("--max_norm_grad", type = float, default = 1.0)
 
     args = vars(parser.parse_args())
