@@ -16,7 +16,7 @@ def parsing():
     parser.add_argument("--random_seed", type = int, default = 42)
     
     # tag and result directory
-    parser.add_argument("--tag", type = str, default = "ddp")
+    parser.add_argument("--tag", type = str, default = "ddp_focal")
     parser.add_argument("--model", type = str, default = "SSD", choices = ["SSD", "FasterRCNN", "RCNN"])
     parser.add_argument("--save_dir", type = str, default = "./results")
 
@@ -36,7 +36,7 @@ def parsing():
     parser.add_argument("--threshold", type = float, default = 0.5)
     parser.add_argument("--neg_pos_ratio", type = float, default = 3.0)
     parser.add_argument("--alpha", type = float, default = 1.0)
-    parser.add_argument("--use_focal_loss", type = bool, default = False)
+    parser.add_argument("--use_focal_loss", type = bool, default = True)
     
     # detection setup
     parser.add_argument("--min_score", type = float, default = 0.5)
