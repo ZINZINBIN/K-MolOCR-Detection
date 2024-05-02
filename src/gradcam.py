@@ -16,7 +16,7 @@ def parsing():
     
     # tag and result directory
     parser.add_argument("--tag", type = str, default = "SSD_ddp")
-    parser.add_argument("--input_file_dir", type = str, default = "./dataset/detection/folder_00/img_00001.jpg")
+    parser.add_argument("--input_file_dir", type = str, default = "./dataset/detection/folder_23/img_147083.jpg")
     parser.add_argument("--save_dir", type = str, default = "./results/gradcam")
 
     # gpu allocation
@@ -48,13 +48,7 @@ class GradCAM(nn.Module):
         self.register_hook()
     
     def register_hook(self):
-        for module_name, module in self.model.base._modules.items():
-            # if module_name == self.module:
-            #     for layer_name, layer in module._modules.items():
-            #         if layer_name == self.layer:    
-            #             module.register_forward_hook(self.forward_hook)
-            #             module.register_backward_hook(self.backward_hook)
-            
+        for _, module in self.model.base._modules.items():    
             module.register_forward_hook(self.forward_hook)
             module.register_backward_hook(self.backward_hook)
                         
@@ -129,5 +123,9 @@ if __name__ == "__main__":
     
     if not os.path.exists(args['save_dir']):
         os.makedirs(args['save_dir'])
+        
+    # resize image
+    resize_img = cv2.resize(resize_img, (600, 900))
+    mask = cv2.resize(mask, (600,900))
     
     show_cam_on_image(resize_img, mask, args['save_dir'])

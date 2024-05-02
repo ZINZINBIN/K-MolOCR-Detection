@@ -18,9 +18,9 @@ def parsing():
     parser.add_argument("--save_filepath", type = str, default = "./results/AU2018379499A1")
     
     # detection setup
-    parser.add_argument("--min_score", type = float, default = 0.2)
-    parser.add_argument("--max_overlap", type = float, default = 0.5)
-    parser.add_argument("--top_k", type = int, default = 5)
+    parser.add_argument("--min_score", type = float, default = 0.5)
+    parser.add_argument("--max_overlap", type = float, default = 0.25)
+    parser.add_argument("--top_k", type = int, default = 12)
 
     # gpu allocation
     parser.add_argument("--gpu_num", type = int, default = 0)

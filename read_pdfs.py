@@ -5,7 +5,7 @@ import numpy as np
 import torch, os
 from src.models.SSD300.model import SSD300
 from src.detect import detect
-from src.utils import crop_mol_img
+from src.soft_nms import SoftNMSWrapper
 from config.API_key import API_KEY
 from tqdm.auto import tqdm
 import argparse, json, boto3, io, cv2, copy
@@ -40,9 +40,10 @@ def parsing():
     parser.add_argument("--save_dir", type = str, default = "./results")
     
     # detection setup
-    parser.add_argument("--min_score", type = float, default = 0.2)
+    parser.add_argument("--min_score", type = float, default = 0.5)
     parser.add_argument("--max_overlap", type = float, default = 0.5)
-    parser.add_argument("--top_k", type = int, default = 5)
+    parser.add_argument("--top_k", type = int, default = 12)
+    parser.add_argument("--soft_nms", type = bool, default = False)
 
     # gpu allocation
     parser.add_argument("--gpu_num", type = int, default = 0)
@@ -102,6 +103,9 @@ if __name__ == "__main__":
     
     print("# Molecular detection proceeding..")
     
+    if args['soft_nms']:
+        model = SoftNMSWrapper(model, device, sigma = 0.5)
+    
     for file_idx, path in enumerate(paths):
 
         imgs = PDF2Image(path, False, None)
@@ -113,7 +117,7 @@ if __name__ == "__main__":
         for idx, img in enumerate(tqdm(imgs, desc = "Detection process for file path: {}".format(path))): 
             origin_img = copy.deepcopy(img)
             
-            annot, is_success, locs, labels = detect(img, model, device, min_score = args['min_score'], max_overlap = args['max_overlap'], top_k = args['top_k'], return_results=True, soft_nms = False)
+            annot, is_success, locs, labels = detect(img, model, device, min_score = args['min_score'], max_overlap = args['max_overlap'], top_k = args['top_k'], return_results=True)
             
             if not is_success:
                 continue

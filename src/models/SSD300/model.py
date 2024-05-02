@@ -455,7 +455,7 @@ class SSD300(nn.Module):
 
         return prior_boxes
     
-    def predict(self, predicted_locs:torch.Tensor, predicted_scores:torch.Tensor, min_score:torch.Tensor, max_overlap:float, top_k:float, soft_nms:bool = False, sigma : float = 0.5):
+    def predict(self, predicted_locs:torch.Tensor, predicted_scores:torch.Tensor, min_score:torch.Tensor, max_overlap:float, top_k:int):
         
         """
         Decipher the 8732 locations and class scores (output of ths SSD300) to detect objects.
@@ -496,20 +496,7 @@ class SSD300(nn.Module):
                 
                 # Keep only predicted boxes and scores where scores for this class are above the minimum score
                 class_scores = predicted_scores[i][:, c]  # (8732)
-                
-                # soft-nms (24.04.01s, not working...)
-                if soft_nms:
-                    class_scores, sort_ind = class_scores.sort(dim=0, descending=True) 
-                    decoded_locs = decoded_locs[sort_ind]  
-                    overlap = find_jaccard_overlap(decoded_locs, decoded_locs)
-                    
-                    max_class_scores = class_scores[0]
-                    
-                    for box in range(decoded_locs.size(0)):
-                        class_scores = torch.where(overlap[box] > max_overlap, class_scores * torch.exp(-overlap[box] ** 2 / sigma), class_scores)
-                        
-                    class_scores[0] = max_class_scores    
-                        
+                            
                 score_above_min_score = class_scores > min_score  # torch.uint8 (byte) tensor, for indexing
                 n_above_min_score = score_above_min_score.sum().item()
                 
