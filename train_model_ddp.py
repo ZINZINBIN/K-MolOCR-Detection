@@ -16,13 +16,13 @@ def parsing():
     parser.add_argument("--random_seed", type = int, default = 42)
     
     # tag and result directory
-    parser.add_argument("--tag", type = str, default = "ddp")
+    parser.add_argument("--tag", type = str, default = "ddp_focal")
     parser.add_argument("--model", type = str, default = "SSD", choices = ["SSD", "FasterRCNN", "RCNN"])
     parser.add_argument("--save_dir", type = str, default = "./results")
 
     # batch size / sequence length / epochs / distance / num workers / pin memory use
     parser.add_argument("--batch_size", type = int, default = 32)
-    parser.add_argument("--num_epoch", type = int, default = 128)
+    parser.add_argument("--num_epoch", type = int, default = 256)
     parser.add_argument("--verbose", type = int, default = 4)
     parser.add_argument("--num_workers", type = int, default = 4)
     parser.add_argument("--pin_memory", type = bool, default = True)
@@ -36,7 +36,7 @@ def parsing():
     parser.add_argument("--threshold", type = float, default = 0.5)
     parser.add_argument("--neg_pos_ratio", type = float, default = 3.0)
     parser.add_argument("--alpha", type = float, default = 1.0)
-    parser.add_argument("--use_focal_loss", type = bool, default = False)
+    parser.add_argument("--use_focal_loss", type = bool, default = True)
     
     # detection setup
     parser.add_argument("--min_score", type = float, default = 0.5)
@@ -44,7 +44,7 @@ def parsing():
     parser.add_argument("--top_k", type = int, default = 12)
     
     # learning rate, step size and decay constant
-    parser.add_argument("--lr", type = float, default = 2e-4)
+    parser.add_argument("--lr", type = float, default = 1e-3)
     parser.add_argument("--max_norm_grad", type = float, default = 1.0)
 
     args = vars(parser.parse_args())

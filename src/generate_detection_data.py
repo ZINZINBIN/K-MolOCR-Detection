@@ -560,9 +560,9 @@ def process(
 # generate detection dataset
 if __name__=="__main__":
     
-    disable_tqdm = True
+    disable_tqdm = False
     
-    df = pd.read_csv('./dataset/surechembl_cleansed.csv').sample(n=100000)
+    df = pd.read_csv('./dataset/surechembl_cleansed.csv').sample(n=80000)
     smiles_list = df['SMILES'].to_list()
 
     table_list = random.sample(glob2.glob('./dataset/cropped_table_images/*'), 256)
